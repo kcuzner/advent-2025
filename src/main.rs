@@ -9,20 +9,51 @@ mod day1 {
             Counter { dial: 50, zeros: 0 }
         }
 
-        fn rotate(&mut self, line: &str) {
-            if line.len() == 0 { return; }
-            let rot: i32 = match line.chars().nth(0).expect("Invalid input, empty string") {
-                'L' => -line[1..].parse::<i32>().expect("Invalid input, no number"),
-                'R' => line[1..].parse().expect("Invalid input, no number"),
-                _ => panic!("Invalid input, bad prefix"),
-            };
-            self.dial = (self.dial + rot).rem_euclid(100);
+        fn rotate(&mut self, line: &str) -> Option<()> {
+            let r = rot(line)?;
+            self.dial = (self.dial + r).rem_euclid(100);
             if self.dial == 0 { self.zeros += 1; }
+            Some(())
+        }
+
+        fn rotate_434c49434b(&mut self, line: &str) -> Option<()> {
+            let mut r = rot(line)?;
+            while r != 0 {
+                if r > 0 {
+                    self.dial += 1;
+                    r -= 1;
+                } else if r < 0 {
+                    self.dial -= 1;
+                    r += 1;
+                }
+                self.dial = self.dial.rem_euclid(100);
+                if self.dial == 0 { self.zeros += 1; }
+            }
+            Some(())
         }
     }
-    pub fn run(input: &str) {
+
+    fn rot(line: &str) -> Option<i32> {
+        if line.len() == 0 { return None; }
+        Some(match line.chars().nth(0).expect("Invalid input, empty string") {
+            'L' => -line[1..].parse::<i32>().expect("Invalid input, no number"),
+            'R' => line[1..].parse().expect("Invalid input, no number"),
+            _ => panic!("Invalid input, bad prefix"),
+        })
+    }
+
+
+    pub fn run1(input: &str) {
         let pw = input.split("\n").fold(Counter::new(), |mut c, i| {
             c.rotate(i);
+            c
+        }).zeros;
+        println!("Password: {pw}")
+    }
+
+    pub fn run2(input: &str) {
+        let pw = input.split("\n").fold(Counter::new(), |mut c, i| {
+            c.rotate_434c49434b(i);
             c
         }).zeros;
         println!("Password: {pw}")
@@ -30,7 +61,8 @@ mod day1 {
 }
 
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
-    "1" => day1::run,
+    "1.1" => day1::run1,
+    "1.2" => day1::run2,
 };
 
 fn main() {
