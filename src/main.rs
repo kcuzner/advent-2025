@@ -74,20 +74,31 @@ mod day1 {
 }
 
 mod day2 {
+    fn groups<'a>(input: &'a str) -> impl Iterator<Item = &'a str> {
+        input.trim().split(",")
+    }
+
+    // parse NNN-MMMM into a tuple of N, M
+    fn start_end(range: &str) -> (u64, u64) {
+        match range
+            .split("-")
+            .map(|n| n.parse::<u64>().expect("invalid number"))
+            .collect::<Vec<_>>()[..]
+        {
+            [s, e, ..] => (s, e),
+            _ => unreachable!(),
+        }
+    }
+
     pub fn run1(input: &str) {
-        let sum = input.trim().split(",").fold(0, |s, group| {
+        let sum = groups(input.trim()).fold(0, |s, group| {
             if group.len() == 0 {
                 return s;
             }
-            let (start, end) = match group
-                .split("-")
-                .map(|n| n.parse::<u64>().expect("invalid number"))
-                .collect::<Vec<_>>()[..]
-            {
-                [s, e, ..] => (s, e),
-                _ => unreachable!(),
-            };
-            (start..end).fold(0, |c, n| {
+            let (start, end) = start_end(group);
+            (start..=end).fold(0, |c, n| {
+                // Sum up all numbers in the range that have the same
+                // digit pattern, repeated twice
                 let v = n.to_string();
                 match v.len() % 2 {
                     0 => {
@@ -103,12 +114,42 @@ mod day2 {
         });
         println!("Sum of invalid IDs: {sum}")
     }
+    pub fn run2(input: &str) {
+        let sum = groups(input.trim()).fold(0, |sum, group| {
+            if group.len() == 0 {
+                return sum;
+            }
+            let (start, end) = start_end(group);
+            (start..=end).fold(sum, |sum, n| {
+                // Sum up all numbers in the range that are made up of any
+                // repeated pattern. The pattern must repeat at least twice,
+                // so we don't need to search for a divisor larger than half
+                // the length of the string.
+                let v = n.to_string();
+                let invalid = (1..=v.len() / 2).fold(false, |invalid, divisor| {
+                    invalid
+                        || match v.len() % divisor {
+                            0 => {
+                                let mut iter = (0..v.len() / divisor)
+                                    .map(|chunk| &v[chunk * divisor..(chunk + 1) * divisor]);
+                                let first = iter.next().expect("wasn't at least one item in list");
+                                iter.all(|chunk| chunk == first)
+                            }
+                            _ => false,
+                        }
+                });
+                if invalid { sum + n } else { sum }
+            })
+        });
+        println!("Sum of invalid IDs: {sum}")
+    }
 }
 
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
     "2.1" => day2::run1,
+    "2.2" => day2::run2,
 };
 
 fn main() {
