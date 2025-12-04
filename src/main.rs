@@ -145,11 +145,40 @@ mod day2 {
     }
 }
 
+mod day3 {
+    fn first_highest(line: &str, start: Option<usize>, stop: Option<usize>) -> (u32, usize) {
+        let begin = start.or(Some(0)).unwrap();
+        let end = stop.or(Some(line.len())).unwrap();
+        let (left, pos) = line[begin..end].chars().enumerate().fold(
+            (None::<u32>, 0),
+            |(left, pos), (index, value)| {
+                let i = value.to_digit(10).expect("Couldn't decode digit");
+                if left.is_none() || left.is_some_and(|l| i > l) {
+                    (Some(i), index)
+                } else {
+                    (left, pos)
+                }
+            },
+        );
+        (left.expect("Must have been an empty line"), pos)
+    }
+
+    pub fn run1(input: &str) {
+        let sum = input.trim().split("\n").fold(0, |total, bank| {
+            let (left, pos) = first_highest(bank, None, Some(bank.len() - 1));
+            let (right, _) = first_highest(bank, Some(pos + 1), None);
+            total + left * 10 + right
+        });
+        println!("Total joltage: {sum}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
     "2.1" => day2::run1,
     "2.2" => day2::run2,
+    "3.1" => day3::run1,
 };
 
 fn main() {
