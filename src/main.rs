@@ -150,11 +150,11 @@ mod day3 {
         let begin = start.or(Some(0)).unwrap();
         let end = stop.or(Some(line.len())).unwrap();
         let (left, pos) = line[begin..end].chars().enumerate().fold(
-            (None::<u32>, 0),
+            (None::<u32>, begin),
             |(left, pos), (index, value)| {
                 let i = value.to_digit(10).expect("Couldn't decode digit");
                 if left.is_none() || left.is_some_and(|l| i > l) {
-                    (Some(i), index)
+                    (Some(i), index+begin)
                 } else {
                     (left, pos)
                 }
@@ -171,6 +171,24 @@ mod day3 {
         });
         println!("Total joltage: {sum}");
     }
+
+    pub fn run2(input: &str) {
+        let sum = input.trim().split("\n").fold(0, |total, bank| {
+            let (numbers, _) =
+                (0..12)
+                    .rev()
+                    .fold((Vec::<u64>::new(), 0), |(mut stack, start), digit| {
+                        // println!("Starting at {start} for digit {digit}");
+                        let (value, pos) =
+                            first_highest(bank, Some(start), Some(bank.len() - digit));
+                        stack.push((value as u64) * 10_u64.pow(digit as u32));
+                        (stack, pos + 1)
+                    });
+            // println!("{:?}", numbers);
+            numbers.iter().sum::<u64>() + total
+        });
+        println!("Total emergency jotage: {sum}");
+    }
 }
 
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
@@ -179,6 +197,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "2.1" => day2::run1,
     "2.2" => day2::run2,
     "3.1" => day3::run1,
+    "3.2" => day3::run2,
 };
 
 fn main() {
