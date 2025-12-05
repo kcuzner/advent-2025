@@ -203,31 +203,57 @@ mod day4 {
         }
     }
 
-    #[rustfmt::skip]
     #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-    enum Dir {
-        NW, N, NE,
-        W,     E,
-        SW, S, SE,
+    enum Spot {
+        Free,
+        Occupied,
     }
-
-    impl Dir {
-        fn access(&self, p: Point, grid: &Vec<&str>) -> Option<char> {
-            let height = grid.len();
-            let width = grid.get(0).unwrap().len();
-            let get = |x: i32, y: i32| -> Option<char> {
-                // Need to explicitly check if we might wrap
+    struct Grid {
+        grid: Vec<Vec<Spot>>,
+    }
+    impl Grid {
+        fn new(input: &str) -> Self {
+            Self {
+                grid: input
+                    .trim()
+                    .split("\n")
+                    .map(|l| {
+                        l.chars()
+                            .map(|c| match c {
+                                '@' => Spot::Occupied,
+                                _ => Spot::Free,
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            }
+        }
+        fn height(&self) -> usize {
+            self.grid.len()
+        }
+        fn width(&self) -> usize {
+            self.grid.get(0).unwrap().len()
+        }
+        fn get(&self, p: Point) -> Option<Spot> {
+            self.grid.get(p.y)
+                .and_then(|l| l.get(p.x))
+                .and_then(|s| Some(s.clone()))
+        }
+        fn get_adjacent(&self, p: Point, dir: Dir) -> Option<Spot> {
+            let get = |x: i32, y: i32| -> Option<Spot> {
+                // Need to explicitly check if we might underflow
                 if p.x == 0 && x < 0 {
                     None
                 } else if p.y == 0 && y < 0 {
                     None
                 } else {
-                    grid.get(((p.y as i32) + y) as usize)
-                        .and_then(|l| l.as_bytes().get(((p.x as i32) + x) as usize))
-                        .and_then(|c| Some(*c as char))
+                    self.get(Point::new(
+                        ((p.x as i32) + x) as usize,
+                        ((p.y as i32) + y) as usize,
+                    ))
                 }
             };
-            match self {
+            match dir {
                 Dir::NW => get(-1, -1),
                 Dir::N => get(0, -1),
                 Dir::NE => get(1, -1),
@@ -238,6 +264,28 @@ mod day4 {
                 Dir::W => get(-1, 0),
             }
         }
+        fn take(&mut self, p: Point) -> bool {
+            match self.grid.get_mut(p.y)
+                .and_then(|l| l.get_mut(p.x))
+            {
+                Some(s) => {
+                    *s = Spot::Free;
+                    true
+                },
+                _ => false,
+            }
+        }
+    }
+
+    #[rustfmt::skip]
+    #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+    enum Dir {
+        NW, N, NE,
+        W,     E,
+        SW, S, SE,
+    }
+
+    impl Dir {
         fn next(&self) -> Option<Self> {
             match self {
                 Dir::NW => Some(Dir::N),
@@ -276,25 +324,60 @@ mod day4 {
     }
 
     pub fn run1(input: &str) {
-        let grid = input.trim().split("\n").collect::<Vec<&str>>();
-        let sum = grid.iter().enumerate().fold(0, |acc, (y, line)| {
-            line.chars().enumerate().fold(acc, |acc, (x, c)| match c {
-                '@' => {
-                    let point = Point::new(x, y);
-                    let adjacent =
-                        DirIter::new().fold(0, |adjacent, dir| match dir.access(point, &grid) {
-                            Some(c) => match c {
-                                '@' => adjacent + 1,
+        let grid = Grid::new(input);
+        let sum = (0..grid.height()).fold(0, |acc, y| {
+            (0..grid.width()).fold(acc, |acc, x| {
+                let p = Point::new(x, y);
+                match grid.get(p) {
+                    Some(Spot::Occupied) => {
+                        let adjacent = DirIter::new().fold(0, |adjacent, dir| {
+                            match grid.get_adjacent(p, dir) {
+                                Some(Spot::Occupied) => adjacent + 1,
                                 _ => adjacent,
-                            },
-                            None => adjacent,
+                            }
                         });
-                    if adjacent < 4 { acc + 1 } else { acc }
+                        if adjacent < 4 { acc + 1 } else { acc }
+                    }
+                    _ => acc,
                 }
-                _ => acc,
             })
         });
         println!("Total accessible papers: {sum}");
+    }
+
+    pub fn run2(input: &str) {
+        let mut grid = Grid::new(input);
+        let mut removed_count = 0;
+        loop {
+            let to_remove = (0..grid.height()).fold(Vec::<Point>::new(), |to_remove, y| {
+                (0..grid.width()).fold(to_remove, |mut to_remove, x| {
+                    let p = Point::new(x, y);
+                    match grid.get(p) {
+                        Some(Spot::Occupied) => {
+                            let adjacent = DirIter::new().fold(0, |adjacent, dir| {
+                                match grid.get_adjacent(p, dir) {
+                                    Some(Spot::Occupied) => adjacent + 1,
+                                    _ => adjacent,
+                                }
+                            });
+                            if adjacent < 4 {
+                                to_remove.push(p);
+                            }
+                        },
+                        _ => (),
+                    }
+                    to_remove
+                })
+            });
+            removed_count += to_remove.len();
+            let removed = to_remove.iter().fold(false, |removed, p| {
+                grid.take(*p) || removed
+            });
+            if !removed {
+                break
+            }
+        }
+        println!("Total paper removed: {removed_count}");
     }
 }
 
@@ -306,6 +389,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "3.1" => day3::run1,
     "3.2" => day3::run2,
     "4.1" => day4::run1,
+    "4.2" => day4::run2,
 };
 
 fn main() {
