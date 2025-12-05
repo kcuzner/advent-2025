@@ -381,6 +381,57 @@ mod day4 {
     }
 }
 
+mod day5 {
+    struct Range {
+        start: u64,
+        end: u64,
+    }
+    impl FromIterator<u64> for Range {
+        fn from_iter<I: IntoIterator<Item=u64>>(iter: I) -> Self {
+            let mut i = iter.into_iter();
+            Self {
+                start: i.next().expect("Missing start"),
+                end: i.next().expect("Missing end"),
+            }
+        }
+    }
+
+    fn check_fresh(fresh: &Vec<Range>, id: u64) -> bool {
+        for range in fresh {
+            if id >= range.start && id <= range.end {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn run1(input: &str) {
+        let mut iter = input.trim().split("\n");
+        let mut fresh = Vec::<Range>::new();
+        loop {
+            match iter.next() {
+                Some(s) => {
+                    if s.len() == 0 {
+                        break
+                    }
+                    fresh.push(
+                        s.split("-").map(|n| n.parse::<u64>().expect("Invalid integer")).collect()
+                    )
+                },
+                None => panic!("Didn't find separateor between ranges and ids")
+            }
+        }
+        let count = iter.fold(0, |count, s| {
+            if check_fresh(&fresh, s.parse::<u64>().expect("Invalid integer for id")) {
+                count + 1
+            } else {
+                count
+            }
+        });
+        println!("Fresh ingredients: {count}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -390,6 +441,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "3.2" => day3::run2,
     "4.1" => day4::run1,
     "4.2" => day4::run2,
+    "5.1" => day5::run1,
 };
 
 fn main() {
