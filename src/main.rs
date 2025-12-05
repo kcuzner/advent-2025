@@ -154,7 +154,7 @@ mod day3 {
             |(left, pos), (index, value)| {
                 let i = value.to_digit(10).expect("Couldn't decode digit");
                 if left.is_none() || left.is_some_and(|l| i > l) {
-                    (Some(i), index+begin)
+                    (Some(i), index + begin)
                 } else {
                     (left, pos)
                 }
@@ -191,6 +191,113 @@ mod day3 {
     }
 }
 
+mod day4 {
+    #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+    struct Point {
+        x: usize,
+        y: usize,
+    }
+    impl Point {
+        fn new(x: usize, y: usize) -> Self {
+            Self { x: x, y: y }
+        }
+    }
+
+    #[rustfmt::skip]
+    #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+    enum Dir {
+        NW, N, NE,
+        W,     E,
+        SW, S, SE,
+    }
+
+    impl Dir {
+        fn access(&self, p: Point, grid: &Vec<&str>) -> Option<char> {
+            let height = grid.len();
+            let width = grid.get(0).unwrap().len();
+            let get = |x: i32, y: i32| -> Option<char> {
+                // Need to explicitly check if we might wrap
+                if p.x == 0 && x < 0 {
+                    None
+                } else if p.y == 0 && y < 0 {
+                    None
+                } else {
+                    grid.get(((p.y as i32) + y) as usize)
+                        .and_then(|l| l.as_bytes().get(((p.x as i32) + x) as usize))
+                        .and_then(|c| Some(*c as char))
+                }
+            };
+            match self {
+                Dir::NW => get(-1, -1),
+                Dir::N => get(0, -1),
+                Dir::NE => get(1, -1),
+                Dir::E => get(1, 0),
+                Dir::SE => get(1, 1),
+                Dir::S => get(0, 1),
+                Dir::SW => get(-1, 1),
+                Dir::W => get(-1, 0),
+            }
+        }
+        fn next(&self) -> Option<Self> {
+            match self {
+                Dir::NW => Some(Dir::N),
+                Dir::N => Some(Dir::NE),
+                Dir::NE => Some(Dir::E),
+                Dir::E => Some(Dir::SE),
+                Dir::SE => Some(Dir::S),
+                Dir::S => Some(Dir::SW),
+                Dir::SW => Some(Dir::W),
+                Dir::W => None,
+            }
+        }
+    }
+
+    struct DirIter {
+        curr: Option<Dir>,
+    }
+    impl DirIter {
+        fn new() -> Self {
+            DirIter {
+                curr: Some(Dir::NW),
+            }
+        }
+    }
+    impl Iterator for DirIter {
+        type Item = Dir;
+        fn next(&mut self) -> Option<Self::Item> {
+            match self.curr {
+                None => None,
+                Some(c) => {
+                    self.curr = c.next();
+                    Some(c)
+                }
+            }
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let grid = input.trim().split("\n").collect::<Vec<&str>>();
+        let sum = grid.iter().enumerate().fold(0, |acc, (y, line)| {
+            line.chars().enumerate().fold(acc, |acc, (x, c)| match c {
+                '@' => {
+                    let point = Point::new(x, y);
+                    let adjacent =
+                        DirIter::new().fold(0, |adjacent, dir| match dir.access(point, &grid) {
+                            Some(c) => match c {
+                                '@' => adjacent + 1,
+                                _ => adjacent,
+                            },
+                            None => adjacent,
+                        });
+                    if adjacent < 4 { acc + 1 } else { acc }
+                }
+                _ => acc,
+            })
+        });
+        println!("Total accessible papers: {sum}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -198,6 +305,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "2.2" => day2::run2,
     "3.1" => day3::run1,
     "3.2" => day3::run2,
+    "4.1" => day4::run1,
 };
 
 fn main() {
