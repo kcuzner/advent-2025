@@ -530,6 +530,64 @@ mod day5 {
     }
 }
 
+mod day6 {
+    struct Calculator {
+        stack: Vec<i64>,
+    }
+    impl Calculator {
+        fn new() -> Self {
+            Self { stack: Vec::new() }
+        }
+        fn sum<F>(&mut self, op: F)
+        where
+            F: Fn(Option<i64>, i64) -> Option<i64>,
+        {
+            let sum = self
+                .stack
+                .iter()
+                .fold(None, |sum, value| op(sum, *value))
+                .expect("Empty stack?!??");
+            self.stack.clear();
+            self.stack.push(sum);
+        }
+        fn process(&mut self, input: &str) {
+            match input.chars().nth(0).expect("Empty string") {
+                '*' => self.sum(|sum, v| sum.and_then(|sum| Some(sum * v)).or(Some(v))),
+                '+' => self.sum(|sum, v| sum.and_then(|sum| Some(sum + v)).or(Some(v))),
+                _ => self.stack.push(input.parse().expect("Invalid number")),
+            }
+        }
+        fn value(&self) -> Option<i64> {
+            self.stack.get(self.stack.len() - 1).and_then(|v| Some(*v))
+        }
+    }
+    pub fn run1(input: &str) {
+        let mut lines = input.trim().split("\n");
+        let mut calculators = lines
+            .next()
+            .expect("No first line?")
+            .split_whitespace()
+            .map(|i| {
+                let mut c = Calculator::new();
+                c.process(i);
+                c
+            })
+            .collect::<Vec<Calculator>>();
+        lines.fold(&mut calculators, |calculators, l| {
+            l.split_whitespace()
+                .enumerate()
+                .fold(calculators, |calculators, (index, val)| {
+                    calculators[index].process(val);
+                    calculators
+                })
+        });
+        let sum = calculators
+            .iter()
+            .fold(0, |sum, calc| sum + calc.value().expect("No value?"));
+        println!("Grand total of homework: {sum}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -541,6 +599,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "4.2" => day4::run2,
     "5.1" => day5::run1,
     "5.2" => day5::run2,
+    "6.1" => day6::run1,
 };
 
 fn main() {
