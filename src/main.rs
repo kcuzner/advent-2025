@@ -235,7 +235,8 @@ mod day4 {
             self.grid.get(0).unwrap().len()
         }
         fn get(&self, p: Point) -> Option<Spot> {
-            self.grid.get(p.y)
+            self.grid
+                .get(p.y)
                 .and_then(|l| l.get(p.x))
                 .and_then(|s| Some(s.clone()))
         }
@@ -265,13 +266,11 @@ mod day4 {
             }
         }
         fn take(&mut self, p: Point) -> bool {
-            match self.grid.get_mut(p.y)
-                .and_then(|l| l.get_mut(p.x))
-            {
+            match self.grid.get_mut(p.y).and_then(|l| l.get_mut(p.x)) {
                 Some(s) => {
                     *s = Spot::Free;
                     true
-                },
+                }
                 _ => false,
             }
         }
@@ -363,18 +362,18 @@ mod day4 {
                             if adjacent < 4 {
                                 to_remove.push(p);
                             }
-                        },
+                        }
                         _ => (),
                     }
                     to_remove
                 })
             });
             removed_count += to_remove.len();
-            let removed = to_remove.iter().fold(false, |removed, p| {
-                grid.take(*p) || removed
-            });
+            let removed = to_remove
+                .iter()
+                .fold(false, |removed, p| grid.take(*p) || removed);
             if !removed {
-                break
+                break;
             }
         }
         println!("Total paper removed: {removed_count}");
@@ -382,23 +381,73 @@ mod day4 {
 }
 
 mod day5 {
-    struct Range {
-        start: u64,
-        end: u64,
+    // NOTE: I'm using Range rather than Range because its internal
+    // fields are public. That's needed for Day 2 to make things easy.
+    #[derive(PartialEq, Debug)]
+    struct Range(std::ops::Range<u64>);
+    impl std::ops::Deref for Range {
+        type Target = std::ops::Range<u64>;
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
     }
+    impl std::ops::DerefMut for Range {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
     impl FromIterator<u64> for Range {
-        fn from_iter<I: IntoIterator<Item=u64>>(iter: I) -> Self {
+        fn from_iter<I: IntoIterator<Item = u64>>(iter: I) -> Self {
             let mut i = iter.into_iter();
-            Self {
-                start: i.next().expect("Missing start"),
-                end: i.next().expect("Missing end"),
+            let start = i.next().expect("Missing start");
+            let end = i.next().expect("Missing end");
+            Self(start..end + 1)
+        }
+    }
+
+    struct BuildRanges<'a, T>
+    where
+        T: Iterator<Item = &'a str>,
+    {
+        iter: T,
+    }
+    impl<'a, T> BuildRanges<'a, T>
+    where
+        T: Iterator<Item = &'a str>,
+    {
+        fn new(iter: T) -> Self {
+            Self { iter: iter }
+        }
+        fn remaining(self) -> T {
+            self.iter
+        }
+    }
+    impl<'a, T> Iterator for BuildRanges<'a, T>
+    where
+        T: Iterator<Item = &'a str>,
+    {
+        type Item = Range;
+        fn next(&mut self) -> Option<Self::Item> {
+            match self.iter.next() {
+                Some(s) => {
+                    if s.len() == 0 {
+                        return None;
+                    }
+                    Some(
+                        s.split("-")
+                            .map(|n| n.parse::<u64>().expect("Invalid integer"))
+                            .collect(),
+                    )
+                }
+                None => panic!("BuildRanges queried after range section"),
             }
         }
     }
 
     fn check_fresh(fresh: &Vec<Range>, id: u64) -> bool {
         for range in fresh {
-            if id >= range.start && id <= range.end {
+            if range.contains(&id) {
                 return true;
             }
         }
@@ -406,22 +455,9 @@ mod day5 {
     }
 
     pub fn run1(input: &str) {
-        let mut iter = input.trim().split("\n");
-        let mut fresh = Vec::<Range>::new();
-        loop {
-            match iter.next() {
-                Some(s) => {
-                    if s.len() == 0 {
-                        break
-                    }
-                    fresh.push(
-                        s.split("-").map(|n| n.parse::<u64>().expect("Invalid integer")).collect()
-                    )
-                },
-                None => panic!("Didn't find separateor between ranges and ids")
-            }
-        }
-        let count = iter.fold(0, |count, s| {
+        let mut builder = BuildRanges::new(input.trim().split("\n"));
+        let fresh = builder.by_ref().collect::<Vec<Range>>();
+        let count = builder.remaining().fold(0, |count, s| {
             if check_fresh(&fresh, s.parse::<u64>().expect("Invalid integer for id")) {
                 count + 1
             } else {
@@ -429,6 +465,68 @@ mod day5 {
             }
         });
         println!("Fresh ingredients: {count}");
+    }
+
+    pub fn run2(input: &str) {
+        let mut ranges = Vec::<Range>::new();
+        for range in BuildRanges::new(input.trim().split("\n")) {
+            match ranges.iter_mut().fold(Some(range), |range, existing| {
+                match range {
+                    Some(mut range) => {
+                        let start_inside = existing.contains(&range.start);
+                        let end_inside = existing.contains(&(range.end - 1));
+                        let existing_start_inside = range.contains(&existing.start);
+                        let existing_end_inside = range.contains(&(existing.end - 1));
+                        if start_inside && end_inside {
+                            // This range is fully contained by the existing range.
+                            // We can drop this range from the list.
+                            None
+                        } else if existing_start_inside && existing_end_inside {
+                            // The other range is fully contained by by this range.
+                            // Null it out.
+                            existing.end = existing.start;
+                            Some(range)
+                        } else {
+                            if start_inside {
+                                // This range overlaps the existing range at its start.
+                                // Move our start past the existing range's end
+                                range.start = existing.end
+                            }
+                            if end_inside {
+                                // This range overlaps the existing range at its end.
+                                // Move our end before the existing range's start
+                                range.end = existing.start
+                            }
+                            assert!(
+                                !existing.contains(&range.start)
+                                    && !existing.contains(&(range.end - 1)),
+                                "Range still overlaps"
+                            );
+                            if range.is_empty() { None } else { Some(range) }
+                        }
+                    }
+                    _ => None,
+                }
+            }) {
+                Some(range) => ranges.push(range),
+                _ => {}
+            }
+        }
+        let id_count = ranges.iter().fold(0, |id_count, range| {
+            if !range.is_empty() {
+                // Check for overlaps, I don't trust my algorithm.
+                for other in ranges.iter() {
+                    if other == range {
+                        continue;
+                    }
+                    if other.contains(&range.start) || other.contains(&(range.end - 1)) {
+                        println!("{other:?} contains\n{range:?}");
+                    }
+                }
+            }
+            id_count + (range.end - range.start)
+        });
+        println!("Total fresh IDs possible: {id_count}");
     }
 }
 
@@ -442,6 +540,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "4.1" => day4::run1,
     "4.2" => day4::run2,
     "5.1" => day5::run1,
+    "5.2" => day5::run2,
 };
 
 fn main() {
