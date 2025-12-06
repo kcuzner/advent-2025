@@ -547,20 +547,33 @@ mod day6 {
                 .iter()
                 .fold(None, |sum, value| op(sum, *value))
                 .expect("Empty stack?!??");
+            // println!("Sum: '{sum}'");
             self.stack.clear();
             self.stack.push(sum);
         }
         fn process(&mut self, input: &str) {
-            match input.chars().nth(0).expect("Empty string") {
-                '*' => self.sum(|sum, v| sum.and_then(|sum| Some(sum * v)).or(Some(v))),
-                '+' => self.sum(|sum, v| sum.and_then(|sum| Some(sum + v)).or(Some(v))),
-                _ => self.stack.push(input.parse().expect("Invalid number")),
+            // println!("Processing '{input}'");
+            match input.chars().nth(0) {
+                Some('*') => self.sum(|sum, v| sum.and_then(|sum| Some(sum * v)).or(Some(v))),
+                Some('+') => self.sum(|sum, v| sum.and_then(|sum| Some(sum + v)).or(Some(v))),
+                _ => {
+                    if input.trim().len() > 0 {
+                        self.stack.push(input.parse().expect("Invalid number"))
+                    }
+                }
             }
         }
         fn value(&self) -> Option<i64> {
-            self.stack.get(self.stack.len() - 1).and_then(|v| Some(*v))
+            match self.stack.len() {
+                0 => None,
+                len => self.stack.get(len - 1).and_then(|v| Some(*v)),
+            }
+        }
+        fn clear(&mut self) {
+            self.stack.clear()
         }
     }
+
     pub fn run1(input: &str) {
         let mut lines = input.trim().split("\n");
         let mut calculators = lines
@@ -586,6 +599,47 @@ mod day6 {
             .fold(0, |sum, calc| sum + calc.value().expect("No value?"));
         println!("Grand total of homework: {sum}");
     }
+
+    pub fn run2(input: &str) {
+        // It'll be easiest to parse this if I turn it on its side.
+        let mut chars: Vec<Vec<char>> = Vec::new();
+        // do NOT trim, alignment is important
+        for line in input.split("\n") {
+            if line.len() == 0 {
+                continue;
+            }
+            for (row, ch) in line.chars().enumerate() {
+                if chars.len() <= row {
+                    chars.push(Vec::new())
+                }
+                chars
+                    .get_mut(row)
+                    .expect("Whoops algorithm mistake")
+                    .push(ch);
+            }
+        }
+        // They read right to left
+        chars.reverse();
+        // Now as we process the rows, we can just use one calculator
+        let mut calculator = Calculator::new();
+        let mut sum = 0;
+        for row in chars {
+            let string: String = row.iter().collect();
+            if string.as_str().trim().len() == 0 {
+                // Blank lines are the end of a problem
+                sum = calculator
+                    .value().expect("We need a value!") + sum;
+                calculator.clear();
+            } else {
+                // Process the number half (all but last char) and the operator
+                // half. Blank inputs will be treated as nops
+                calculator.process(string[0..string.len()-1].trim());
+                calculator.process(string[string.len()-1..].trim());
+            }
+        }
+        sum = calculator.value().expect("We need a value!") + sum;
+        println!("Grand total of homework: {sum}");
+    }
 }
 
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
@@ -600,6 +654,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "5.1" => day5::run1,
     "5.2" => day5::run2,
     "6.1" => day6::run1,
+    "6.2" => day6::run2,
 };
 
 fn main() {
