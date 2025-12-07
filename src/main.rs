@@ -627,18 +627,52 @@ mod day6 {
             let string: String = row.iter().collect();
             if string.as_str().trim().len() == 0 {
                 // Blank lines are the end of a problem
-                sum = calculator
-                    .value().expect("We need a value!") + sum;
+                sum = calculator.value().expect("We need a value!") + sum;
                 calculator.clear();
             } else {
                 // Process the number half (all but last char) and the operator
                 // half. Blank inputs will be treated as nops
-                calculator.process(string[0..string.len()-1].trim());
-                calculator.process(string[string.len()-1..].trim());
+                calculator.process(string[0..string.len() - 1].trim());
+                calculator.process(string[string.len() - 1..].trim());
             }
         }
         sum = calculator.value().expect("We need a value!") + sum;
         println!("Grand total of homework: {sum}");
+    }
+}
+
+mod day7 {
+    pub fn run1(input: &str) {
+        struct Data {
+            // Beams for the next row
+            beams: std::collections::HashSet<usize>,
+            splits: u32,
+        }
+        let data = input.trim().split("\n").fold(
+            Data {
+                beams: std::collections::HashSet::new(),
+                splits: 0,
+            },
+            |data, line| {
+                let active = data.beams.clone();
+                line.chars().enumerate().fold(data, |mut data, (index, ch)| {
+                    match ch {
+                        'S' => { data.beams.insert(index); },
+                        '^' => {
+                            if active.contains(&index) {
+                                data.beams.remove(&index);
+                                data.beams.insert(index-1);
+                                data.beams.insert(index+1);
+                                data.splits += 1;
+                            }
+                        },
+                        _ => (),
+                    }
+                    data
+                })
+            },
+        );
+        println!("Times split: {}", data.splits);
     }
 }
 
@@ -655,6 +689,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "5.2" => day5::run2,
     "6.1" => day6::run1,
     "6.2" => day6::run2,
+    "7.1" => day7::run1,
 };
 
 fn main() {
