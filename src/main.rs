@@ -642,37 +642,68 @@ mod day6 {
 }
 
 mod day7 {
-    pub fn run1(input: &str) {
-        struct Data {
-            // Beams for the next row
-            beams: std::collections::HashSet<usize>,
-            splits: u32,
-        }
-        let data = input.trim().split("\n").fold(
-            Data {
-                beams: std::collections::HashSet::new(),
+    use std::collections::HashSet;
+
+    struct Data {
+        // Beams for the next row
+        beams: HashSet<usize>,
+        splits: u32,
+        paths: u32,
+    }
+    impl Data {
+        fn new() -> Self {
+            Self {
+                beams: HashSet::new(),
                 splits: 0,
-            },
-            |data, line| {
-                let active = data.beams.clone();
-                line.chars().enumerate().fold(data, |mut data, (index, ch)| {
-                    match ch {
-                        'S' => { data.beams.insert(index); },
-                        '^' => {
-                            if active.contains(&index) {
-                                data.beams.remove(&index);
-                                data.beams.insert(index-1);
-                                data.beams.insert(index+1);
-                                data.splits += 1;
-                            }
-                        },
-                        _ => (),
+            }
+        }
+        fn apply(&mut self, active: &HashSet<usize>, index: usize, ch: char) {
+            match ch {
+                'S' => {
+                    self.beams.insert(index);
+                }
+                '^' => {
+                    if active.contains(&index) {
+                        self.beams.remove(&index);
+                        if self.beams.insert(index - 1) { self.paths += 1; }
+                        if self.beams.insert(index + 1) { self.paths += 1; }
+                        self.splits += 1;
                     }
+                }
+                _ => (),
+            }
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let data = input.trim().split("\n").fold(Data::new(), |data, line| {
+            let active = data.beams.clone();
+            line.chars()
+                .enumerate()
+                .fold(data, |mut data, (index, ch)| {
+                    data.apply(&active, index, ch);
                     data
                 })
-            },
-        );
+        });
         println!("Times split: {}", data.splits);
+    }
+
+    pub fn run2(input: &str) {
+        let (_, paths) = input
+            .trim()
+            .split("\n")
+            .fold((Data::new(), 0), |mut data, line| {
+                let active = data.0.beams.clone();
+                line.chars()
+                    .enumerate()
+                    .fold(&mut data.0, |mut data, (index, ch)| {
+                        data.apply(&active, index, ch);
+                        data
+                    });
+                data.1 += data.0.beams.len();
+                data
+            });
+        println!("Possible paths: {}", data.
     }
 }
 
@@ -690,6 +721,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "6.1" => day6::run1,
     "6.2" => day6::run2,
     "7.1" => day7::run1,
+    "7.2" => day7::run2,
 };
 
 fn main() {
