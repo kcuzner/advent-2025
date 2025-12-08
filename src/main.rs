@@ -642,7 +642,7 @@ mod day6 {
 }
 
 mod day7 {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     pub fn run1(input: &str) {
         struct Data {
@@ -683,62 +683,47 @@ mod day7 {
 
     pub fn run2(input: &str) {
         struct Data {
-            paths: Vec<Vec<usize>>,
+            // Keyed by index, number of active paths at that index
+            paths: HashMap<usize, u64>,
         }
-        let data = input
-            .trim()
-            .split("\n")
-            .fold(Data { paths: Vec::new() }, |data, line| {
-                let data = line
-                    .chars()
+        let data = input.trim().split("\n").fold(
+            Data {
+                paths: HashMap::new(),
+            },
+            |data, line| {
+                line.chars()
                     .enumerate()
                     .fold(data, |mut data, (index, ch)| {
                         match ch {
                             'S' => {
-                                data.paths.push(vec![index]);
+                                data.paths.insert(index, 1);
                             }
-                            '^' => {
-                                let additions: Vec<Vec<usize>> = data
-                                    .paths
-                                    .iter_mut()
-                                    .filter_map(|p| {
-                                        if p.last()
-                                            .and_then(|l| Some(l == &index))
-                                            .or(Some(false))
-                                            .unwrap()
-                                        {
-                                            // Fork the path, each path takes a direction
-                                            let mut other = p.clone();
-                                            p.push(index - 1);
-                                            other.push(index + 1);
-                                            // Return the other path as an addition (we can't
-                                            // mutate data while iterating)
-                                            Some(other)
-                                        } else {
-                                            None
+                            '^' => match data.paths.remove(&index) {
+                                Some(count_here) => {
+                                    let (left, right) = (index - 1, index + 1);
+                                    match data.paths.get_mut(&left) {
+                                        Some(count_left) => *count_left += count_here,
+                                        None => {
+                                            data.paths.insert(left, count_here);
                                         }
-                                    })
-                                    .collect();
-                                additions.into_iter().for_each(|a| data.paths.push(a));
-                            }
-                            '.' => {
-                                // Extend all paths at this index
-                                for p in data.paths.iter_mut().filter(|p| {
-                                    p.last()
-                                        .and_then(|l| Some(l == &index))
-                                        .or(Some(false))
-                                        .unwrap()
-                                }) {
-                                    p.push(index);
+                                    }
+                                    match data.paths.get_mut(&right) {
+                                        Some(count_right) => *count_right += count_here,
+                                        None => {
+                                            data.paths.insert(right, count_here);
+                                        }
+                                    }
                                 }
-                            }
-                            _ => panic!("Unhandled character in file"),
+                                _ => (),
+                            },
+                            _ => (),
                         }
                         data
-                    });
-                data
-            });
-        println!("Active paths: {}", data.paths.len());
+                    })
+            },
+        );
+        let sum = data.paths.iter().fold(0, |sum, (_, count)| sum + count);
+        println!("Active paths: {sum}");
     }
 }
 
