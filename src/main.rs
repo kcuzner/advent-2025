@@ -644,66 +644,101 @@ mod day6 {
 mod day7 {
     use std::collections::HashSet;
 
-    struct Data {
-        // Beams for the next row
-        beams: HashSet<usize>,
-        splits: u32,
-        paths: u32,
-    }
-    impl Data {
-        fn new() -> Self {
-            Self {
+    pub fn run1(input: &str) {
+        struct Data {
+            // Beams for the next row
+            beams: HashSet<usize>,
+            splits: u32,
+        }
+        let data = input.trim().split("\n").fold(
+            Data {
                 beams: HashSet::new(),
                 splits: 0,
-            }
-        }
-        fn apply(&mut self, active: &HashSet<usize>, index: usize, ch: char) {
-            match ch {
-                'S' => {
-                    self.beams.insert(index);
-                }
-                '^' => {
-                    if active.contains(&index) {
-                        self.beams.remove(&index);
-                        if self.beams.insert(index - 1) { self.paths += 1; }
-                        if self.beams.insert(index + 1) { self.paths += 1; }
-                        self.splits += 1;
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
-
-    pub fn run1(input: &str) {
-        let data = input.trim().split("\n").fold(Data::new(), |data, line| {
-            let active = data.beams.clone();
-            line.chars()
-                .enumerate()
-                .fold(data, |mut data, (index, ch)| {
-                    data.apply(&active, index, ch);
-                    data
-                })
-        });
+            },
+            |data, line| {
+                let active = data.beams.clone();
+                line.chars()
+                    .enumerate()
+                    .fold(data, |mut data, (index, ch)| {
+                        match ch {
+                            'S' => {
+                                data.beams.insert(index);
+                            }
+                            '^' => {
+                                if active.contains(&index) {
+                                    data.beams.remove(&index);
+                                    data.beams.insert(index - 1);
+                                    data.beams.insert(index + 1);
+                                    data.splits += 1;
+                                }
+                            }
+                            _ => (),
+                        }
+                        data
+                    })
+            },
+        );
         println!("Times split: {}", data.splits);
     }
 
     pub fn run2(input: &str) {
-        let (_, paths) = input
+        struct Data {
+            paths: Vec<Vec<usize>>,
+        }
+        let data = input
             .trim()
             .split("\n")
-            .fold((Data::new(), 0), |mut data, line| {
-                let active = data.0.beams.clone();
-                line.chars()
+            .fold(Data { paths: Vec::new() }, |data, line| {
+                let data = line
+                    .chars()
                     .enumerate()
-                    .fold(&mut data.0, |mut data, (index, ch)| {
-                        data.apply(&active, index, ch);
+                    .fold(data, |mut data, (index, ch)| {
+                        match ch {
+                            'S' => {
+                                data.paths.push(vec![index]);
+                            }
+                            '^' => {
+                                let additions: Vec<Vec<usize>> = data
+                                    .paths
+                                    .iter_mut()
+                                    .filter_map(|p| {
+                                        if p.last()
+                                            .and_then(|l| Some(l == &index))
+                                            .or(Some(false))
+                                            .unwrap()
+                                        {
+                                            // Fork the path, each path takes a direction
+                                            let mut other = p.clone();
+                                            p.push(index - 1);
+                                            other.push(index + 1);
+                                            // Return the other path as an addition (we can't
+                                            // mutate data while iterating)
+                                            Some(other)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect();
+                                additions.into_iter().for_each(|a| data.paths.push(a));
+                            }
+                            '.' => {
+                                // Extend all paths at this index
+                                for p in data.paths.iter_mut().filter(|p| {
+                                    p.last()
+                                        .and_then(|l| Some(l == &index))
+                                        .or(Some(false))
+                                        .unwrap()
+                                }) {
+                                    p.push(index);
+                                }
+                            }
+                            _ => panic!("Unhandled character in file"),
+                        }
                         data
                     });
-                data.1 += data.0.beams.len();
                 data
             });
-        println!("Possible paths: {}", data.
+        println!("Active paths: {}", data.paths.len());
     }
 }
 
