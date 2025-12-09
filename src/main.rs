@@ -727,6 +727,133 @@ mod day7 {
     }
 }
 
+mod day8 {
+    use std::cmp::Ordering;
+    use std::collections::{BinaryHeap, HashMap};
+
+    #[derive(Eq, PartialEq, Hash, Clone)]
+    struct Point(i64, i64, i64);
+    type DistCache = HashMap<(Point, Point), f64>;
+    impl Point {
+        fn distance_to(&self, other: &Point, cache: &mut DistCache) -> f64 {
+            let key = (self.clone(), other.clone());
+            cache
+                .get(&key)
+                .and_then(|v| Some(*v))
+                .or_else(|| {
+                    let dist = (((self.0 - other.0).pow(2)
+                        + (self.1 - other.1).pow(2)
+                        + (self.2 - other.2).pow(2)) as f64)
+                        .sqrt();
+                    cache.insert(key, dist);
+                    Some(dist)
+                })
+                .expect("Wat no cache")
+        }
+    }
+
+    impl FromIterator<i64> for Point {
+        fn from_iter<I: IntoIterator<Item = i64>>(iter: I) -> Self {
+            let mut iter = iter.into_iter();
+            Point(
+                iter.next().expect("Missing X"),
+                iter.next().expect("Missing Y"),
+                iter.next().expect("Missing Z"),
+            )
+        }
+    }
+
+    struct Circuit {
+        points: Vec<Point>,
+    }
+    impl Circuit {
+        fn new(point: Point) -> Self {
+            Self {
+                points: vec![point],
+            }
+        }
+
+        fn distance_to(&self, other: &Circuit, mut cache: &mut DistCache) -> f64 {
+            self.points.iter().fold(f64::INFINITY, |dist, point| {
+                other.points.iter().fold(dist, |dist, other| {
+                    match point.distance_to(other, &mut cache) {
+                        d if d < dist => d,
+                        _ => dist,
+                    }
+                })
+            })
+        }
+
+        fn join(&mut self, mut other: Circuit) {
+            self.points.append(&mut other.points)
+        }
+    }
+    impl Ord for Circuit {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.points.len().cmp(&other.points.len())
+        }
+    }
+    impl PartialOrd for Circuit {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl PartialEq for Circuit {
+        fn eq(&self, other: &Self) -> bool {
+            self.points.len() == other.points.len()
+        }
+    }
+    impl Eq for Circuit {}
+
+    pub fn run1(input: &str) {
+        let mut circuits: Vec<Circuit> = input
+            .trim()
+            .split("\n")
+            .map(|l| Circuit::new(l.split(",").map(|s| s.parse().unwrap()).collect()))
+            .collect();
+        (0..1000).fold(HashMap::new(), |cache, n| {
+            println!("Iteration {n}");
+            // This will attempt each point twice, will fix if it's a problem
+            let (_dist, index_a, index_b, cache) = circuits.iter().enumerate().fold(
+                (f64::INFINITY, 0, 0, cache),
+                |candidate, (index_a, a)| {
+                    circuits.iter().enumerate().fold(
+                        candidate,
+                        |(dist, c_a, c_b, mut cache), (index_b, b)| {
+                            if index_a == index_b
+                                || (c_a == index_a && c_b == index_b)
+                                || (c_b == index_a && c_a == index_b)
+                            {
+                                return (dist, c_a, c_b, cache);
+                            }
+                            match a.distance_to(b, &mut cache) {
+                                d if d < dist => (d, index_a, index_b, cache),
+                                _ => (dist, c_a, c_b, cache),
+                            }
+                        },
+                    )
+                },
+            );
+            // The lowest-valued index will remain valid after the remove
+            let (index_a, index_b) = if index_a < index_b {
+                (index_a, index_b)
+            } else {
+                (index_b, index_a)
+            };
+            // Not using swap remove because the above gets corner-y
+            let b = circuits.remove(index_b);
+            circuits.get_mut(index_a).unwrap().join(b);
+            cache
+        });
+        // Stuff the circuits into a binary heap and find the 10 largest
+        let circuits: BinaryHeap<Circuit> = circuits.into();
+        let (sum, _) = (0..10).fold((1, circuits), |(sum, mut circuits), _| {
+            (sum * circuits.pop().unwrap().points.len(), circuits)
+        });
+        println!("Sum: {sum}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -742,6 +869,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "6.2" => day6::run2,
     "7.1" => day7::run1,
     "7.2" => day7::run2,
+    "8.1" => day8::run1,
 };
 
 fn main() {
