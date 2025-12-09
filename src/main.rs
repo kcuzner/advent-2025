@@ -729,26 +729,15 @@ mod day7 {
 
 mod day8 {
     use std::cmp::Ordering;
-    use std::collections::{BinaryHeap, HashMap};
+    use std::collections::BinaryHeap;
 
     #[derive(Eq, PartialEq, Hash, Clone)]
     struct Point(i64, i64, i64);
-    type DistCache = HashMap<(Point, Point), f64>;
     impl Point {
-        fn distance_to(&self, other: &Point, cache: &mut DistCache) -> f64 {
-            let key = (self.clone(), other.clone());
-            cache
-                .get(&key)
-                .and_then(|v| Some(*v))
-                .or_else(|| {
-                    let dist = (((self.0 - other.0).pow(2)
-                        + (self.1 - other.1).pow(2)
-                        + (self.2 - other.2).pow(2)) as f64)
-                        .sqrt();
-                    cache.insert(key, dist);
-                    Some(dist)
-                })
-                .expect("Wat no cache")
+        fn distance_to(&self, other: &Point) -> f64 {
+            (((self.0 - other.0).pow(2) + (self.1 - other.1).pow(2) + (self.2 - other.2).pow(2))
+                as f64)
+                .sqrt()
         }
     }
 
@@ -773,14 +762,15 @@ mod day8 {
             }
         }
 
-        fn distance_to(&self, other: &Circuit, mut cache: &mut DistCache) -> f64 {
+        fn distance_to(&self, other: &Circuit) -> f64 {
             self.points.iter().fold(f64::INFINITY, |dist, point| {
-                other.points.iter().fold(dist, |dist, other| {
-                    match point.distance_to(other, &mut cache) {
+                other
+                    .points
+                    .iter()
+                    .fold(dist, |dist, other| match point.distance_to(other) {
                         d if d < dist => d,
                         _ => dist,
-                    }
-                })
+                    })
             })
         }
 
@@ -811,27 +801,29 @@ mod day8 {
             .split("\n")
             .map(|l| Circuit::new(l.split(",").map(|s| s.parse().unwrap()).collect()))
             .collect();
-        (0..1000).fold(HashMap::new(), |cache, n| {
-            println!("Iteration {n}");
+        for n in 0..1000 {
+            if n % 100 == 0 {
+                println!("Iteration {n}");
+            }
             // This will attempt each point twice, will fix if it's a problem
-            let (_dist, index_a, index_b, cache) = circuits.iter().enumerate().fold(
-                (f64::INFINITY, 0, 0, cache),
+            let (_dist, index_a, index_b) = circuits.iter().enumerate().fold(
+                (f64::INFINITY, 0, 0),
                 |candidate, (index_a, a)| {
-                    circuits.iter().enumerate().fold(
-                        candidate,
-                        |(dist, c_a, c_b, mut cache), (index_b, b)| {
+                    circuits
+                        .iter()
+                        .enumerate()
+                        .fold(candidate, |(dist, c_a, c_b), (index_b, b)| {
                             if index_a == index_b
                                 || (c_a == index_a && c_b == index_b)
                                 || (c_b == index_a && c_a == index_b)
                             {
-                                return (dist, c_a, c_b, cache);
+                                return (dist, c_a, c_b);
                             }
-                            match a.distance_to(b, &mut cache) {
-                                d if d < dist => (d, index_a, index_b, cache),
-                                _ => (dist, c_a, c_b, cache),
+                            match a.distance_to(b) {
+                                d if d < dist => (d, index_a, index_b),
+                                _ => (dist, c_a, c_b),
                             }
-                        },
-                    )
+                        })
                 },
             );
             // The lowest-valued index will remain valid after the remove
@@ -843,8 +835,7 @@ mod day8 {
             // Not using swap remove because the above gets corner-y
             let b = circuits.remove(index_b);
             circuits.get_mut(index_a).unwrap().join(b);
-            cache
-        });
+        }
         // Stuff the circuits into a binary heap and find the 10 largest
         let circuits: BinaryHeap<Circuit> = circuits.into();
         let (sum, _) = (0..10).fold((1, circuits), |(sum, mut circuits), _| {
