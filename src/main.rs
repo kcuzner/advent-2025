@@ -801,15 +801,15 @@ mod day8 {
     impl Room {
         fn new(input: &str) -> Self {
             let points: Vec<_> = input
-            .trim()
-            .split("\n")
-            .enumerate()
-            .map(|(n, l)| {
-                let mut point: Point = l.split(",").map(|s| s.parse().unwrap()).collect();
-                point.circuit = n;
-                point
-            })
-            .collect();
+                .trim()
+                .split("\n")
+                .enumerate()
+                .map(|(n, l)| {
+                    let mut point: Point = l.split(",").map(|s| s.parse().unwrap()).collect();
+                    point.circuit = n;
+                    point
+                })
+                .collect();
             let circuit_sizes = vec![1usize; points.len()];
             let distances: BinaryHeap<Distance> = points
                 .iter()
@@ -830,8 +830,11 @@ mod day8 {
                     })
                 })
                 .collect();
-            Self { points, circuit_sizes,
-            distances }
+            Self {
+                points,
+                circuit_sizes,
+                distances,
+            }
         }
 
         fn consolidate(&mut self) -> Distance {
@@ -841,8 +844,10 @@ mod day8 {
             println!("B: {:?}", points.get(closest.index_b).unwrap());*/
             let circuit = self.points.get(closest.index_a).unwrap().circuit;
             let circuit_b = self.points.get(closest.index_b).unwrap().circuit;
-            let index_b: Vec<usize> = self.points
-                .iter().enumerate()
+            let index_b: Vec<usize> = self
+                .points
+                .iter()
+                .enumerate()
                 .filter_map(|(index, point)| {
                     if point.circuit == circuit_b {
                         Some(index)
@@ -872,7 +877,9 @@ mod day8 {
 
         fn check_if_consolidated(&self) -> bool {
             let mut iter = self.circuit_sizes.iter();
-            let _ = iter.find(|&size| size > &0).expect("No nonzero circuits...where did all the points go");
+            let _ = iter
+                .find(|&size| size > &0)
+                .expect("No nonzero circuits...where did all the points go");
             // Find the next nonzero circuit. If there isn't one, we're merged.
             iter.find(|&size| size > &0).is_none()
         }
@@ -907,6 +914,59 @@ mod day8 {
     }
 }
 
+mod day9 {
+    struct Tile {
+        x: i64,
+        y: i64,
+    }
+    impl Tile {
+        fn area(&self, other: &Self) -> i64 {
+            let width = (self.x - other.x).abs() + 1;
+            let height = (self.y - other.y).abs() + 1;
+            width * height
+        }
+    }
+    impl FromIterator<i64> for Tile {
+        fn from_iter<I: IntoIterator<Item = i64>>(iter: I) -> Self {
+            let mut iter = iter.into_iter();
+            let x = iter.next().expect("No x");
+            let y = iter.next().expect("No y");
+            Self { x, y }
+        }
+    }
+
+    struct Room {
+        tiles: Vec<Tile>,
+    }
+    impl Room {
+        fn new(input: &str) -> Self {
+            let tiles: Vec<Tile> = input
+                .trim()
+                .split("\n")
+                .map(|l| l.split(",").map(|s| s.parse().expect("Invalid number")).collect())
+                .collect();
+            Self { tiles }
+        }
+
+        fn largest_area(&self) -> i64 {
+            self.tiles.iter().fold(0, |area, a| {
+                self.tiles.iter().fold(area, |area, b| {
+                    match a.area(b) {
+                        size if size > area => size,
+                        _ => area
+                    }
+                })
+            })
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let room = Room::new(input);
+        let largest = room.largest_area();
+        println!("Largest area: {largest}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -924,6 +984,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "7.2" => day7::run2,
     "8.1" => day8::run1,
     "8.2" => day8::run2,
+    "9.1" => day9::run1,
 };
 
 fn main() {
