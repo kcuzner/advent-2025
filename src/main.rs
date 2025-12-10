@@ -731,11 +731,24 @@ mod day8 {
     use std::cmp::Ordering;
     use std::collections::BinaryHeap;
 
-    #[derive(Eq, PartialEq, Hash, Clone)]
-    struct Point(i64, i64, i64);
+    #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+    struct Point {
+        x: i64,
+        y: i64,
+        z: i64,
+        circuit: usize,
+    }
     impl Point {
+        fn new(x: i64, y: i64, z: i64) -> Self {
+            Self {
+                x,
+                y,
+                z,
+                circuit: 0,
+            }
+        }
         fn distance_to(&self, other: &Point) -> f64 {
-            (((self.0 - other.0).pow(2) + (self.1 - other.1).pow(2) + (self.2 - other.2).pow(2))
+            (((self.x - other.x).pow(2) + (self.y - other.y).pow(2) + (self.z - other.z).pow(2))
                 as f64)
                 .sqrt()
         }
@@ -744,7 +757,7 @@ mod day8 {
     impl FromIterator<i64> for Point {
         fn from_iter<I: IntoIterator<Item = i64>>(iter: I) -> Self {
             let mut iter = iter.into_iter();
-            Point(
+            Point::new(
                 iter.next().expect("Missing X"),
                 iter.next().expect("Missing Y"),
                 iter.next().expect("Missing Z"),
@@ -752,95 +765,102 @@ mod day8 {
         }
     }
 
-    struct Circuit {
-        points: Vec<Point>,
+    #[derive(Debug)]
+    struct Distance {
+        index_a: usize,
+        index_b: usize,
+        distance: f64,
     }
-    impl Circuit {
-        fn new(point: Point) -> Self {
-            Self {
-                points: vec![point],
-            }
-        }
 
-        fn distance_to(&self, other: &Circuit) -> f64 {
-            self.points.iter().fold(f64::INFINITY, |dist, point| {
-                other
-                    .points
-                    .iter()
-                    .fold(dist, |dist, other| match point.distance_to(other) {
-                        d if d < dist => d,
-                        _ => dist,
-                    })
-            })
-        }
-
-        fn join(&mut self, mut other: Circuit) {
-            self.points.append(&mut other.points)
-        }
-    }
-    impl Ord for Circuit {
-        fn cmp(&self, other: &Self) -> Ordering {
-            self.points.len().cmp(&other.points.len())
-        }
-    }
-    impl PartialOrd for Circuit {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-    impl PartialEq for Circuit {
+    impl PartialEq for Distance {
         fn eq(&self, other: &Self) -> bool {
-            self.points.len() == other.points.len()
+            self.distance.eq(&other.distance)
         }
     }
-    impl Eq for Circuit {}
+
+    impl Eq for Distance {}
+
+    // NOTE: distance is never NaN
+    impl PartialOrd for Distance {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            other.distance.partial_cmp(&self.distance)
+        }
+    }
+    impl Ord for Distance {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.partial_cmp(other).unwrap()
+        }
+    }
 
     pub fn run1(input: &str) {
-        let mut circuits: Vec<Circuit> = input
+        let mut points: Vec<Point> = input
             .trim()
             .split("\n")
-            .map(|l| Circuit::new(l.split(",").map(|s| s.parse().unwrap()).collect()))
+            .enumerate()
+            .map(|(n, l)| {
+                let mut point: Point = l.split(",").map(|s| s.parse().unwrap()).collect();
+                point.circuit = n;
+                point
+            })
             .collect();
-        for n in 0..1000 {
-            if n % 100 == 0 {
-                println!("Iteration {n}");
-            }
-            // This will attempt each point twice, will fix if it's a problem
-            let (_dist, index_a, index_b) = circuits.iter().enumerate().fold(
-                (f64::INFINITY, 0, 0),
-                |candidate, (index_a, a)| {
-                    circuits
-                        .iter()
-                        .enumerate()
-                        .fold(candidate, |(dist, c_a, c_b), (index_b, b)| {
-                            if index_a == index_b
-                                || (c_a == index_a && c_b == index_b)
-                                || (c_b == index_a && c_a == index_b)
-                            {
-                                return (dist, c_a, c_b);
-                            }
-                            match a.distance_to(b) {
-                                d if d < dist => (d, index_a, index_b),
-                                _ => (dist, c_a, c_b),
-                            }
+        let mut circuit_sizes = vec![1usize; points.len()];
+        let mut distances: BinaryHeap<Distance> = points
+            .iter()
+            .enumerate()
+            .flat_map(|(index_a, a)| {
+                points.iter().enumerate().filter_map(move |(index_b, b)| {
+                    if index_a >= index_b {
+                        // Don't compare the same value, nor should we run the
+                        // same comparison twice
+                        None
+                    } else {
+                        Some(Distance {
+                            index_a,
+                            index_b,
+                            distance: a.distance_to(&b),
                         })
-                },
-            );
-            // The lowest-valued index will remain valid after the remove
-            let (index_a, index_b) = if index_a < index_b {
-                (index_a, index_b)
-            } else {
-                (index_b, index_a)
-            };
-            // Not using swap remove because the above gets corner-y
-            let b = circuits.remove(index_b);
-            circuits.get_mut(index_a).unwrap().join(b);
+                    }
+                })
+            })
+            .collect();
+        for _ in 0..1000 {
+            let closest = distances.pop().unwrap();
+            /*println!("Distance: {closest:?}");
+            println!("A: {:?}", points.get(closest.index_a).unwrap());
+            println!("B: {:?}", points.get(closest.index_b).unwrap());*/
+            let circuit = points.get(closest.index_a).unwrap().circuit;
+            let circuit_b = points.get(closest.index_b).unwrap().circuit;
+            let index_b: Vec<usize> = points
+                .iter().enumerate()
+                .filter_map(|(index, point)| {
+                    if point.circuit == circuit_b {
+                        Some(index)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let changed = index_b.iter().fold(0, |mut changed, index| {
+                let point = points.get_mut(*index).unwrap();
+                if point.circuit != circuit {
+                    let size = circuit_sizes.get_mut(point.circuit).unwrap();
+                    *size -= 1;
+                    changed += 1;
+                    point.circuit = circuit;
+                }
+                changed
+            });
+            let size = circuit_sizes.get_mut(circuit).unwrap();
+            *size += changed;
+            /*println!("Circuits: {circuit_sizes:?}");*/
         }
-        // Stuff the circuits into a binary heap and find the 10 largest
-        let circuits: BinaryHeap<Circuit> = circuits.into();
-        let (sum, _) = (0..10).fold((1, circuits), |(sum, mut circuits), _| {
-            (sum * circuits.pop().unwrap().points.len(), circuits)
-        });
+        let mut largest: BinaryHeap<usize> = circuit_sizes.into_iter().collect();
+        let mut sum = 1;
+        for i in 0..3 {
+            let size = largest.pop().unwrap();
+            println!("Circuit {i}: {size}");
+            sum *= size;
+        }
         println!("Sum: {sum}");
     }
 }
