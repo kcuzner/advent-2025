@@ -792,8 +792,15 @@ mod day8 {
         }
     }
 
-    pub fn run1(input: &str) {
-        let mut points: Vec<Point> = input
+    struct Room {
+        points: Vec<Point>,
+        circuit_sizes: Vec<usize>,
+        distances: BinaryHeap<Distance>,
+    }
+
+    impl Room {
+        fn new(input: &str) -> Self {
+            let points: Vec<_> = input
             .trim()
             .split("\n")
             .enumerate()
@@ -803,34 +810,38 @@ mod day8 {
                 point
             })
             .collect();
-        let mut circuit_sizes = vec![1usize; points.len()];
-        let mut distances: BinaryHeap<Distance> = points
-            .iter()
-            .enumerate()
-            .flat_map(|(index_a, a)| {
-                points.iter().enumerate().filter_map(move |(index_b, b)| {
-                    if index_a >= index_b {
-                        // Don't compare the same value, nor should we run the
-                        // same comparison twice
-                        None
-                    } else {
-                        Some(Distance {
-                            index_a,
-                            index_b,
-                            distance: a.distance_to(&b),
-                        })
-                    }
+            let circuit_sizes = vec![1usize; points.len()];
+            let distances: BinaryHeap<Distance> = points
+                .iter()
+                .enumerate()
+                .flat_map(|(index_a, a)| {
+                    points.iter().enumerate().filter_map(move |(index_b, b)| {
+                        if index_a >= index_b {
+                            // Don't compare the same value, nor should we run the
+                            // same comparison twice
+                            None
+                        } else {
+                            Some(Distance {
+                                index_a,
+                                index_b,
+                                distance: a.distance_to(&b),
+                            })
+                        }
+                    })
                 })
-            })
-            .collect();
-        for _ in 0..1000 {
-            let closest = distances.pop().unwrap();
+                .collect();
+            Self { points, circuit_sizes,
+            distances }
+        }
+
+        fn consolidate(&mut self) -> Distance {
+            let closest = self.distances.pop().unwrap();
             /*println!("Distance: {closest:?}");
             println!("A: {:?}", points.get(closest.index_a).unwrap());
             println!("B: {:?}", points.get(closest.index_b).unwrap());*/
-            let circuit = points.get(closest.index_a).unwrap().circuit;
-            let circuit_b = points.get(closest.index_b).unwrap().circuit;
-            let index_b: Vec<usize> = points
+            let circuit = self.points.get(closest.index_a).unwrap().circuit;
+            let circuit_b = self.points.get(closest.index_b).unwrap().circuit;
+            let index_b: Vec<usize> = self.points
                 .iter().enumerate()
                 .filter_map(|(index, point)| {
                     if point.circuit == circuit_b {
@@ -841,20 +852,38 @@ mod day8 {
                 })
                 .collect();
             let changed = index_b.iter().fold(0, |mut changed, index| {
-                let point = points.get_mut(*index).unwrap();
+                let point = self.points.get_mut(*index).unwrap();
                 if point.circuit != circuit {
-                    let size = circuit_sizes.get_mut(point.circuit).unwrap();
+                    let size = self.circuit_sizes.get_mut(point.circuit).unwrap();
                     *size -= 1;
                     changed += 1;
                     point.circuit = circuit;
                 }
                 changed
             });
-            let size = circuit_sizes.get_mut(circuit).unwrap();
+            let size = self.circuit_sizes.get_mut(circuit).unwrap();
             *size += changed;
-            /*println!("Circuits: {circuit_sizes:?}");*/
+            closest
         }
-        let mut largest: BinaryHeap<usize> = circuit_sizes.into_iter().collect();
+
+        fn into_circuit_sizes(self) -> BinaryHeap<usize> {
+            self.circuit_sizes.into_iter().collect()
+        }
+
+        fn check_if_consolidated(&self) -> bool {
+            let mut iter = self.circuit_sizes.iter();
+            let _ = iter.find(|&size| size > &0).expect("No nonzero circuits...where did all the points go");
+            // Find the next nonzero circuit. If there isn't one, we're merged.
+            iter.find(|&size| size > &0).is_none()
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let mut room = Room::new(input);
+        for _ in 0..1000 {
+            room.consolidate();
+        }
+        let mut largest = room.into_circuit_sizes();
         let mut sum = 1;
         for i in 0..3 {
             let size = largest.pop().unwrap();
@@ -862,6 +891,19 @@ mod day8 {
             sum *= size;
         }
         println!("Sum: {sum}");
+    }
+
+    pub fn run2(input: &str) {
+        let mut room = Room::new(input);
+        let mut pair = None::<Distance>;
+        while !room.check_if_consolidated() {
+            pair = Some(room.consolidate());
+        }
+        let pair = pair.unwrap();
+        let a = room.points.get(pair.index_a).unwrap();
+        let b = room.points.get(pair.index_b).unwrap();
+        let x = a.x * b.x;
+        println!("Result: {x}");
     }
 }
 
@@ -881,6 +923,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "7.1" => day7::run1,
     "7.2" => day7::run2,
     "8.1" => day8::run1,
+    "8.2" => day8::run2,
 };
 
 fn main() {
