@@ -915,11 +915,18 @@ mod day8 {
 }
 
 mod day9 {
+    use std::cmp::Ordering;
+    use std::collections::BinaryHeap;
+
+    #[derive(Clone)]
     struct Tile {
         x: i64,
         y: i64,
     }
     impl Tile {
+        fn new(x: i64, y: i64) -> Self {
+            Self { x, y }
+        }
         fn area(&self, other: &Self) -> i64 {
             let width = (self.x - other.x).abs() + 1;
             let height = (self.y - other.y).abs() + 1;
@@ -935,6 +942,85 @@ mod day9 {
         }
     }
 
+    struct Rectangle {
+        a: Tile,
+        b: Tile,
+        area: i64,
+    }
+    impl Rectangle {
+        fn new(a: &Tile, b: &Tile) -> Self {
+            let area = a.area(&b);
+            Self {
+                a: a.clone(),
+                b: b.clone(),
+                area,
+            }
+        }
+    }
+    impl PartialEq for Rectangle {
+        fn eq(&self, other: &Self) -> bool {
+            self.area.eq(&other.area)
+        }
+    }
+    impl Eq for Rectangle {}
+    impl Ord for Rectangle {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.area.cmp(&other.area)
+        }
+    }
+    impl PartialOrd for Rectangle {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    enum Edge {
+        Horizontal { x: (i64, i64), y: i64 },
+        Vertical { x: i64, y: (i64, i64) },
+    }
+    impl Edge {
+        fn new(a: &Tile, b: &Tile) -> Self {
+            // We can assume that the tiles are co-...axial? The edge will always
+            // be horizontal or vertical
+            if a.x == b.x {
+                Self::Vertical {
+                    x: a.x,
+                    y: (a.y, b.y),
+                }
+            } else {
+                Self::Horizontal {
+                    x: (a.x, b.x),
+                    y: a.y,
+                }
+            }
+        }
+
+        // Clip against the left side of a rectangle
+        fn clip_left(&self, x: i64) -> Option<Edge> {
+            match self {
+                Self::Horizontal { x: mx, y: my } => match mx {
+                    (x1, x2) if x1 < &x && x2 < &x => None,
+                    (x1, x2) if x1 <= &x && x2 >= &x => Some(Self::Horizontal {
+                        x: (x, *x2),
+                        y: *my,
+                    }),
+                    (x1, x2) if x2 <= &x && x1 >= &x => Some(Self::Horizontal {
+                        x: (*x1, x),
+                        y: *my,
+                    }),
+                    (x1, x2) => Some(Self::Horizontal {
+                        x: (*x1, *x2),
+                        y: *my,
+                    }),
+                },
+                Self::Vertical { x: mx, y: my } => match mx {
+                    mx if mx < &x => None,
+                    mx => Some(Self::Vertical { x: *mx, y: *my }),
+                },
+            }
+        }
+    }
+
     struct Room {
         tiles: Vec<Tile>,
     }
@@ -943,20 +1029,170 @@ mod day9 {
             let tiles: Vec<Tile> = input
                 .trim()
                 .split("\n")
-                .map(|l| l.split(",").map(|s| s.parse().expect("Invalid number")).collect())
+                .map(|l| {
+                    l.split(",")
+                        .map(|s| s.parse().expect("Invalid number"))
+                        .collect()
+                })
                 .collect();
             Self { tiles }
         }
 
-        fn largest_area(&self) -> i64 {
-            self.tiles.iter().fold(0, |area, a| {
-                self.tiles.iter().fold(area, |area, b| {
-                    match a.area(b) {
-                        size if size > area => size,
-                        _ => area
-                    }
-                })
+        fn rectangles(&self) -> impl Iterator<Item = Rectangle> {
+            self.tiles.iter().enumerate().flat_map(|(index_a, a)| {
+                self.tiles
+                    .iter()
+                    .enumerate()
+                    .filter_map(move |(index_b, b)| {
+                        if index_b >= index_a {
+                            return None;
+                        }
+                        Some(Rectangle::new(a, b))
+                    })
             })
+        }
+
+        fn edges(&self) -> impl Iterator<Item = Edge> {
+            EdgeIter::new(self.tiles.iter())
+        }
+
+        fn largest_area(&self) -> i64 {
+            self.rectangles().fold(
+                0,
+                |area, rect| {
+                    if rect.area > area { rect.area } else { area }
+                },
+            )
+        }
+    }
+
+    // Direction of a clip
+    //
+    // The opposite direction is "inside". So for a Left clip, only tiles to
+    // the right of the represented line are inside.
+    enum ClipDirection {
+        Left { x: i64 },
+        Right { x: i64 },
+        Top { y: i64 },
+        Bottom { y: i64 },
+    }
+    impl ClipDirection {
+        // Clips the passed tile to be inside this direction, returning the
+        // clipped tile and if clipping happened
+        fn clip_inside(&self, tile: Tile) -> (Tile, bool) {
+            match self {
+                Self::Left { x } => {
+                    if tile.x >= *x {
+                        (tile, false)
+                    } else {
+                        (Tile::new(*x, tile.y), true)
+                    }
+                }
+                Self::Right { x } => {
+                    if tile.x <= *x {
+                        (tile, false)
+                    } else {
+                        (Tile::new(*x, tile.y), true)
+                    }
+                }
+                Self::Top { y } => {
+                    if tile.y <= *y {
+                        (tile, false)
+                    } else {
+                        (Tile::new(tile.x, *y), true)
+                    }
+                }
+                Self::Bottom { y } => {
+                    if tile.y >= *y {
+                        (tile, false)
+                    } else {
+                        (Tile::new(tile.x, *y), true)
+                    }
+                }
+            }
+        }
+    }
+
+    struct ClipIter<'a, T: Iterator<Item = &'a Tile>> {
+        iter: T,
+        candidate: Option<Tile>,
+        direction: ClipDirection,
+    }
+    impl<'a, T> Iterator for ClipIter<'a, T>
+    where
+        T: Iterator<Item = &'a Tile>,
+    {
+        type Item = Tile;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            // As we iterate through the list of tiles, we clip them against
+            // our direction. If a tile is clipped, we only emit it if the next
+            // tile is not clipped, dropping it from the list otherwise. The
+            // non-clipped tile is stored as the "candidate" and then immediately
+            // emitted onthe next iteration.
+            loop {
+                match self.candidate.take() {
+                    None => {
+                        self.candidate = self
+                            .iter
+                            .next()
+                            .cloned()
+                            .and_then(|t| self.direction.clip_inside(t).0);
+                        // If we have no candidate after this point, then
+                        // we're done
+                        if self.candidate.is_none() {
+                            return None
+                        }
+                    }
+                    Some(candidate) => {
+                        // We have a candidate. If the candidate doesn't clip,
+                        // then we're going to emit it.
+                    }
+                }
+            }
+        }
+    }
+
+    // Generates a bunch of edges from the tiles
+    struct EdgeIter<'a, T: Iterator<Item = &'a Tile>> {
+        iter: T,
+        first: Option<&'a Tile>,
+        last: Option<&'a Tile>,
+    }
+    impl<'a, T> EdgeIter<'a, T>
+    where
+        T: Iterator<Item = &'a Tile>,
+    {
+        fn new(mut iter: T) -> Self {
+            let first = iter.next();
+            let last = first.clone();
+            Self { iter, first, last }
+        }
+
+        fn next_edge(&mut self, a: &Tile) -> Option<Edge> {
+            match self.iter.next().or_else(|| self.first.take()) {
+                Some(b) => {
+                    let edge = Some(Edge::new(&a, &b));
+                    self.last = Some(b);
+                    edge
+                }
+                _ => None,
+            }
+        }
+    }
+    impl<'a, T> Iterator for EdgeIter<'a, T>
+    where
+        T: Iterator<Item = &'a Tile>,
+    {
+        type Item = Edge;
+        fn next(&mut self) -> Option<Self::Item> {
+            match self.last {
+                None => match self.iter.next() {
+                    Some(a) => self.next_edge(a),
+                    _ => None,
+                },
+                Some(a) => self.next_edge(a),
+            }
         }
     }
 
@@ -964,6 +1200,27 @@ mod day9 {
         let room = Room::new(input);
         let largest = room.largest_area();
         println!("Largest area: {largest}");
+    }
+
+    pub fn draw(input: &str) {
+        // This is a frustrating problem, I need to see what I'm dealing with
+        let room = Room::new(input);
+        let svg_points = room.tiles.iter().fold(String::new(), |mut s, t| {
+            s.push_str(format!("{},{} ", t.x, t.y).as_str());
+            s
+        });
+        let svg = format!("<svg height=\"100000\" width=\"100000\"  xmlns=\"http://www.w3.org/2000/svg\">\
+            <polygon points=\"{}\" style=\"stroke:black;stroke-width:1\" /></svg>", svg_points);
+        std::fs::write("day9.svg", svg).expect("Unable to write file");
+    }
+
+    pub fn run2(input: &str) {
+        let room = Room::new(input);
+        // Rectanges sorted by largest. We just need to find the largest
+        // rectangle that is fully inside the polygon and we can quit.
+        let rectangles: BinaryHeap<_> = room.rectangles().collect();
+        let edges: Vec<_> = room.edges().collect();
+        println!("{}", edges.len());
     }
 }
 
@@ -984,7 +1241,9 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "7.2" => day7::run2,
     "8.1" => day8::run1,
     "8.2" => day8::run2,
+    "9-draw" => day9::draw,
     "9.1" => day9::run1,
+    "9.2" => day9::run2,
 };
 
 fn main() {
