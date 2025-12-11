@@ -956,6 +956,44 @@ mod day9 {
                 area,
             }
         }
+
+        fn corner_coordinates(&self) -> (i64, i64, i64, i64) {
+            let (x1, x2) = (self.a.x, self.b.x);
+            let (y1, y2) = (self.a.y, self.b.y);
+            // Order the points so we can just go around
+            let (x1, x2) = if x1 <= x2 { (x1, x2) } else { (x2, x1) };
+            let (y1, y2) = if y1 <= y2 { (y1, y2) } else { (y2, y1) };
+            (x1, x2, y1, y2)
+        }
+
+        fn corners(&self) -> impl Iterator<Item = Tile> {
+            let (x1, x2, y1, y2) = self.corner_coordinates();
+            vec![
+                Tile::new(x1, y1),
+                Tile::new(x2, y1),
+                Tile::new(x2, y2),
+                Tile::new(x1, y2),
+            ]
+            .into_iter()
+        }
+
+        fn edges(&self) -> impl Iterator<Item = Edge> {
+            let corners: Vec<_> = self.corners().collect();
+            let edges: Vec<_> = EdgeIter::new(corners.iter()).map(|e| e.clone()).collect();
+            edges.into_iter()
+        }
+
+        fn contains(&self, edge: &Edge) -> bool{
+            let (x1, x2, y1, y2) = self.corner_coordinates();
+            match edge {
+                Edge::Horizontal { x, y } => {
+                    (x1 < x.0 && x.0 < x2) && (x1 < x.1 && x.1 < x2) && y1 < *y && *y < y2
+                },
+                Edge::Vertical { x, y } => {
+                    (y1 < y.0 && y.0 < y2) && (y1 < y.1 && y.1 < y2) && x1 < *x && *x < x2
+                }
+            }
+        }
     }
     impl PartialEq for Rectangle {
         fn eq(&self, other: &Self) -> bool {
@@ -974,6 +1012,7 @@ mod day9 {
         }
     }
 
+    #[derive(Clone, Debug)]
     enum Edge {
         Horizontal { x: (i64, i64), y: i64 },
         Vertical { x: i64, y: (i64, i64) },
@@ -995,27 +1034,38 @@ mod day9 {
             }
         }
 
-        // Clip against the left side of a rectangle
-        fn clip_left(&self, x: i64) -> Option<Edge> {
+        fn point_in_line(&self, point: i64) -> bool {
             match self {
-                Self::Horizontal { x: mx, y: my } => match mx {
-                    (x1, x2) if x1 < &x && x2 < &x => None,
-                    (x1, x2) if x1 <= &x && x2 >= &x => Some(Self::Horizontal {
-                        x: (x, *x2),
-                        y: *my,
-                    }),
-                    (x1, x2) if x2 <= &x && x1 >= &x => Some(Self::Horizontal {
-                        x: (*x1, x),
-                        y: *my,
-                    }),
-                    (x1, x2) => Some(Self::Horizontal {
-                        x: (*x1, *x2),
-                        y: *my,
-                    }),
+                Self::Horizontal { x: mx, y: _ } => {
+                    if mx.0 <= mx.1 {
+                        mx.0 < point && point < mx.1
+                    } else {
+                        mx.1 < point && point < mx.0
+                    }
+                }
+                Self::Vertical { x: _, y: my } => {
+                    if my.0 <= my.1 {
+                        my.0 < point && point < my.1
+                    } else {
+                        my.1 < point && point < my.0
+                    }
+                }
+            }
+        }
+
+        fn intersects(&self, other: &Self) -> bool {
+            match self {
+                Self::Horizontal { x: _, y: my } => match other {
+                    Self::Horizontal { x: _, y: _ } => false,
+                    Self::Vertical { x: ox, y: _ } => {
+                        self.point_in_line(*ox) && other.point_in_line(*my)
+                    }
                 },
-                Self::Vertical { x: mx, y: my } => match mx {
-                    mx if mx < &x => None,
-                    mx => Some(Self::Vertical { x: *mx, y: *my }),
+                Self::Vertical { x: mx, y: _ } => match other {
+                    Self::Horizontal { x: _, y: oy } => {
+                        self.point_in_line(*oy) && other.point_in_line(*mx)
+                    }
+                    Self::Vertical { x: _, y: _ } => false,
                 },
             }
         }
@@ -1066,93 +1116,6 @@ mod day9 {
         }
     }
 
-    // Direction of a clip
-    //
-    // The opposite direction is "inside". So for a Left clip, only tiles to
-    // the right of the represented line are inside.
-    enum ClipDirection {
-        Left { x: i64 },
-        Right { x: i64 },
-        Top { y: i64 },
-        Bottom { y: i64 },
-    }
-    impl ClipDirection {
-        // Clips the passed tile to be inside this direction, returning the
-        // clipped tile and if clipping happened
-        fn clip_inside(&self, tile: Tile) -> (Tile, bool) {
-            match self {
-                Self::Left { x } => {
-                    if tile.x >= *x {
-                        (tile, false)
-                    } else {
-                        (Tile::new(*x, tile.y), true)
-                    }
-                }
-                Self::Right { x } => {
-                    if tile.x <= *x {
-                        (tile, false)
-                    } else {
-                        (Tile::new(*x, tile.y), true)
-                    }
-                }
-                Self::Top { y } => {
-                    if tile.y <= *y {
-                        (tile, false)
-                    } else {
-                        (Tile::new(tile.x, *y), true)
-                    }
-                }
-                Self::Bottom { y } => {
-                    if tile.y >= *y {
-                        (tile, false)
-                    } else {
-                        (Tile::new(tile.x, *y), true)
-                    }
-                }
-            }
-        }
-    }
-
-    struct ClipIter<'a, T: Iterator<Item = &'a Tile>> {
-        iter: T,
-        candidate: Option<Tile>,
-        direction: ClipDirection,
-    }
-    impl<'a, T> Iterator for ClipIter<'a, T>
-    where
-        T: Iterator<Item = &'a Tile>,
-    {
-        type Item = Tile;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            // As we iterate through the list of tiles, we clip them against
-            // our direction. If a tile is clipped, we only emit it if the next
-            // tile is not clipped, dropping it from the list otherwise. The
-            // non-clipped tile is stored as the "candidate" and then immediately
-            // emitted onthe next iteration.
-            loop {
-                match self.candidate.take() {
-                    None => {
-                        self.candidate = self
-                            .iter
-                            .next()
-                            .cloned()
-                            .and_then(|t| self.direction.clip_inside(t).0);
-                        // If we have no candidate after this point, then
-                        // we're done
-                        if self.candidate.is_none() {
-                            return None
-                        }
-                    }
-                    Some(candidate) => {
-                        // We have a candidate. If the candidate doesn't clip,
-                        // then we're going to emit it.
-                    }
-                }
-            }
-        }
-    }
-
     // Generates a bunch of edges from the tiles
     struct EdgeIter<'a, T: Iterator<Item = &'a Tile>> {
         iter: T,
@@ -1196,6 +1159,44 @@ mod day9 {
         }
     }
 
+    struct SvgBuilder {
+        s: String,
+    }
+    impl SvgBuilder {
+        fn new() -> Self {
+            Self {
+                s: "<svg height=\"100000\" width=\"100000\"  xmlns=\"http://www.w3.org/2000/svg\">\n"
+                    .to_string(),
+            }
+        }
+
+        fn add_tiles<T>(&mut self, iter: T)
+        where
+            T: IntoIterator<Item = Tile>,
+        {
+            let points = iter.into_iter().fold(String::new(), |mut s, t| {
+                s.push_str(format!("{},{} ", t.x, t.y).as_str());
+                s
+            });
+            self.s.push_str(
+                format!(
+                    "<polygon points=\"{}\"\nstyle=\"fill:green;stroke:black;stroke-width:100\" />\n",
+                    points
+                )
+                .as_str(),
+            );
+        }
+
+        fn add_rectangle(&mut self, rect: &Rectangle) {
+            self.add_tiles(rect.corners());
+        }
+
+        fn svg(mut self) -> String {
+            self.s.push_str("</svg>");
+            self.s
+        }
+    }
+
     pub fn run1(input: &str) {
         let room = Room::new(input);
         let largest = room.largest_area();
@@ -1209,8 +1210,11 @@ mod day9 {
             s.push_str(format!("{},{} ", t.x, t.y).as_str());
             s
         });
-        let svg = format!("<svg height=\"100000\" width=\"100000\"  xmlns=\"http://www.w3.org/2000/svg\">\
-            <polygon points=\"{}\" style=\"stroke:black;stroke-width:1\" /></svg>", svg_points);
+        let svg = format!(
+            "<svg height=\"100000\" width=\"100000\"  xmlns=\"http://www.w3.org/2000/svg\">\
+            <polygon points=\"{}\" style=\"stroke:black;stroke-width:1\" /></svg>",
+            svg_points
+        );
         std::fs::write("day9.svg", svg).expect("Unable to write file");
     }
 
@@ -1218,9 +1222,41 @@ mod day9 {
         let room = Room::new(input);
         // Rectanges sorted by largest. We just need to find the largest
         // rectangle that is fully inside the polygon and we can quit.
-        let rectangles: BinaryHeap<_> = room.rectangles().collect();
+        let mut rectangles: BinaryHeap<_> = room.rectangles().collect();
+        println!("There are {} rectangles!", rectangles.len());
         let edges: Vec<_> = room.edges().collect();
-        println!("{}", edges.len());
+        while let Some(rectangle) = rectangles.pop() {
+            // A rectangle is fully contained in the polygon if no edges
+            // intersect it. Note that our rectangles are formed from the edges
+            // of the polygon, so we know the rectangle is inside the polygon:
+            // The only question is if the rectangle is completely filled by
+            // the polygon.
+            let contained = rectangle
+                .edges()
+                .find(|rect_edge| {
+                    edges
+                        .iter()
+                        .find(|room_edge| {
+                            let intersects = rect_edge.intersects(room_edge) ||
+                                rectangle.contains(room_edge);
+                            if intersects {
+                                // println!("{rect_edge:?} intersected {room_edge:?}");
+                            }
+                            intersects
+                        })
+                        .is_some()
+                })
+                .is_none();
+            if contained {
+                let mut svg = SvgBuilder::new();
+                svg.add_tiles(room.tiles);
+                svg.add_rectangle(&rectangle);
+                std::fs::write("day9.svg", svg.svg()).expect("Unable to write file");
+                println!("Largest rectangle: {}", rectangle.area);
+                return;
+            }
+        }
+        println!("dang");
     }
 }
 
