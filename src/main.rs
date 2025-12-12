@@ -983,12 +983,12 @@ mod day9 {
             edges.into_iter()
         }
 
-        fn contains(&self, edge: &Edge) -> bool{
+        fn contains(&self, edge: &Edge) -> bool {
             let (x1, x2, y1, y2) = self.corner_coordinates();
             match edge {
                 Edge::Horizontal { x, y } => {
                     (x1 < x.0 && x.0 < x2) && (x1 < x.1 && x.1 < x2) && y1 < *y && *y < y2
-                },
+                }
                 Edge::Vertical { x, y } => {
                     (y1 < y.0 && y.0 < y2) && (y1 < y.1 && y.1 < y2) && x1 < *x && *x < x2
                 }
@@ -1237,8 +1237,8 @@ mod day9 {
                     edges
                         .iter()
                         .find(|room_edge| {
-                            let intersects = rect_edge.intersects(room_edge) ||
-                                rectangle.contains(room_edge);
+                            let intersects =
+                                rect_edge.intersects(room_edge) || rectangle.contains(room_edge);
                             if intersects {
                                 // println!("{rect_edge:?} intersected {room_edge:?}");
                             }
@@ -1257,6 +1257,79 @@ mod day9 {
             }
         }
         println!("dang");
+    }
+}
+
+mod day10 {
+    use std::collections::HashSet;
+
+    struct Machine {
+        // Each bit is an indicator
+        desired: u32,
+        buttons: Vec<u32>,
+    }
+    impl Machine {
+        fn new(line: &str) -> Self {
+            let mut iter = line.trim().split_whitespace();
+            let desired_str = iter.next().expect("No desired pattern");
+            let desired: u32 =
+                desired_str[1..desired_str.len() - 1]
+                    .chars()
+                    .rev()
+                    .fold(0, |mut sum, ch| {
+                        sum <<= 1;
+                        if ch == '#' {
+                            sum += 1;
+                        }
+                        sum
+                    });
+            let mut iter = iter.rev();
+            let _ = iter.next().expect("No joltage"); //not sure what to do here yet
+            let buttons: Vec<u32> = iter
+                .map(|s| {
+                    s[1..s.len() - 1]
+                        .split(",")
+                        .map(|n| n.parse().expect("Bad button number"))
+                        .fold(0, |mask, number| mask + 2u32.pow(number))
+                })
+                .collect();
+            Self { desired, buttons }
+        }
+
+        fn get_init_sequence_len(&self) -> usize {
+            if self.desired == 0 {
+                return 0;
+            }
+            // First button press...
+            let mut states: HashSet<u32> = self.buttons.iter().map(|i| *i).collect();
+            for i in 1.. {
+                if states.contains(&self.desired) {
+                    return i;
+                }
+                // This is a brute force algorithm, but none of the machines
+                // have a particularly large control panel. This should top out
+                // at like 200-500 items for the 9-ish bits I think we actually
+                // use.
+                let progress: Vec<_> = states.drain().collect();
+                // For each in-progress sequence, press each button once and
+                // add the result into the set
+                for p in progress.into_iter() {
+                    for b in self.buttons.iter() {
+                        states.insert(p ^ b);
+                    }
+                }
+            }
+            unreachable!()
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let machines: Vec<_> = input.trim().split("\n").map(|l| Machine::new(l)).collect();
+        let presses = machines
+            .iter()
+            .map(|m| m.get_init_sequence_len())
+            .fold(0, |sum, l| sum + l);
+        println!("Total presses: {presses}");
     }
 }
 
@@ -1280,6 +1353,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "9-draw" => day9::draw,
     "9.1" => day9::run1,
     "9.2" => day9::run2,
+    "10.1" => day10::run1,
 };
 
 fn main() {
