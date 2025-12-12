@@ -1263,10 +1263,14 @@ mod day9 {
 mod day10 {
     use std::collections::HashSet;
 
+    type Joltage = [u32; 10];
+    const ZEROED: Joltage = [0; 10];
+
     struct Machine {
         // Each bit is an indicator
         desired: u32,
         buttons: Vec<u32>,
+        joltage: Joltage,
     }
     impl Machine {
         fn new(line: &str) -> Self {
@@ -1284,7 +1288,17 @@ mod day10 {
                         sum
                     });
             let mut iter = iter.rev();
-            let _ = iter.next().expect("No joltage"); //not sure what to do here yet
+            let mut joltage: Joltage = ZEROED;
+            iter
+                .next()
+                .and_then(|s| Some(s[1..s.len() - 1].to_string()))
+                .expect("No joltage")
+                .split(",")
+                .map(|n| n.parse().expect("Bad joltage number"))
+                .zip(joltage.iter_mut())
+                .for_each(|(s, d)| {
+                    *d = s;
+                });
             let buttons: Vec<u32> = iter
                 .map(|s| {
                     s[1..s.len() - 1]
@@ -1293,7 +1307,11 @@ mod day10 {
                         .fold(0, |mask, number| mask + 2u32.pow(number))
                 })
                 .collect();
-            Self { desired, buttons }
+            Self {
+                desired,
+                buttons,
+                joltage,
+            }
         }
 
         fn get_init_sequence_len(&self) -> usize {
@@ -1321,13 +1339,99 @@ mod day10 {
             }
             unreachable!()
         }
+
+        fn get_joltage_sequence_len(&self) -> usize {
+            // This follows a similar principle to the init sequence, though
+            // we'll use Vec (which crazily enough is hashable) instead of
+            // numbers. It's gonna be slow as crap, so I'll at least optmize
+            // the memory by using a pool of vectors.
+            let start = [0; 10];
+            if self.joltage == start {
+                return 0;
+            }
+            // We should cache the buttons as incrementors
+            let buttons: Vec<_> = self.buttons.iter().map(|b| {
+                let mut j: Joltage = ZEROED;
+                j.iter_mut().fold(b.clone(), |b, j| {
+                    if b & 0x1 > 0 {
+                        *j = 1;
+                    }
+                    b >> 1
+                });
+                j
+            }).collect();
+            // let mut pool: Vec<Vec<u32>> = Vec::new();
+            // First button press...
+            let mut states: HashSet<Joltage> = buttons.iter().map(|b| b.clone()).collect();
+            for i in 1.. {
+                println!("hi");
+                if states.contains(&self.joltage) {
+                    println!("yay");
+                    return i;
+                }
+                /*if i % 100 == 0 {
+                    println!("{states:?}");
+                }*/
+                // Brute force just like above.
+                // println!("{states:?}");
+                let progress: Vec<_> = states.drain().collect();
+                for p in progress.into_iter() {
+                    for b in buttons.iter() {
+                        // let mut state = pool.pop().or_else(|| Some(Vec::new())).unwrap();
+                        // Increment the state after cloning it
+                        let mut next = p.clone();
+                        next.iter_mut().zip(b.iter()).for_each(|(n, b)| *n += b);
+                        if !next.iter().zip(self.joltage.iter()).any(|(s, j)| s > j) {
+                            states.insert(next);
+                        }
+                        /*state.extend(p.iter());
+                        apply_joltage(*b, state.iter_mut());
+                        // If after applytng the joltage any counter is too
+                        // high, this path isn't going to work. Similarly, if
+                        // this one is already in the hashset, drop it back
+                        // into the pool.
+                        if state.iter().zip(self.joltage.iter()).any(|(s, j)| s > j) ||
+                            states.contains(&state) {
+                            state.clear();
+                            pool.push(state);
+                        } else {
+                            states.insert(state);
+                        }*/
+                    }
+                    /*p.clear();
+                    pool.push(p);*/
+                }
+            }
+            unreachable!()
+        }
     }
+
+    /*fn apply_joltage<'a, T>(button: u32, counters: T)
+    where
+        T: IntoIterator<Item = &'a mut u32>,
+    {
+        counters.into_iter().fold(button, |button, value| {
+            if button & 0x1 != 0 {
+                *value += 1;
+            }
+            button >> 1
+        });
+    }*/
 
     pub fn run1(input: &str) {
         let machines: Vec<_> = input.trim().split("\n").map(|l| Machine::new(l)).collect();
         let presses = machines
             .iter()
             .map(|m| m.get_init_sequence_len())
+            .fold(0, |sum, l| sum + l);
+        println!("Total presses: {presses}");
+    }
+
+    pub fn run2(input: &str) {
+        let machines: Vec<_> = input.trim().split("\n").map(|l| Machine::new(l)).collect();
+        let presses = machines
+            .iter()
+            .map(|m| m.get_joltage_sequence_len())
             .fold(0, |sum, l| sum + l);
         println!("Total presses: {presses}");
     }
@@ -1354,6 +1458,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "9.1" => day9::run1,
     "9.2" => day9::run2,
     "10.1" => day10::run1,
+    "10.2" => day10::run2,
 };
 
 fn main() {
