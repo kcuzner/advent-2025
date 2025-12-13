@@ -1263,14 +1263,11 @@ mod day9 {
 mod day10 {
     use std::collections::HashSet;
 
-    type Joltage = [u32; 10];
-    const ZEROED: Joltage = [0; 10];
-
     struct Machine {
         // Each bit is an indicator
         desired: u32,
         buttons: Vec<u32>,
-        joltage: Joltage,
+        joltage: Vec<u32>,
     }
     impl Machine {
         fn new(line: &str) -> Self {
@@ -1288,17 +1285,13 @@ mod day10 {
                         sum
                     });
             let mut iter = iter.rev();
-            let mut joltage: Joltage = ZEROED;
-            iter
+            let mut joltage: Vec<u32> = iter
                 .next()
                 .and_then(|s| Some(s[1..s.len() - 1].to_string()))
                 .expect("No joltage")
                 .split(",")
                 .map(|n| n.parse().expect("Bad joltage number"))
-                .zip(joltage.iter_mut())
-                .for_each(|(s, d)| {
-                    *d = s;
-                });
+                .collect();
             let buttons: Vec<u32> = iter
                 .map(|s| {
                     s[1..s.len() - 1]
@@ -1341,17 +1334,24 @@ mod day10 {
         }
 
         fn get_joltage_sequence_len(&self) -> usize {
-            // This follows a similar principle to the init sequence, though
-            // we'll use Vec (which crazily enough is hashable) instead of
-            // numbers. It's gonna be slow as crap, so I'll at least optmize
-            // the memory by using a pool of vectors.
-            let start = [0; 10];
-            if self.joltage == start {
-                return 0;
-            }
-            // We should cache the buttons as incrementors
+            // The final joltage can be thought of as the sum of the button
+            // presses. We'll create a matrix where a button press for a counter
+            // places a 1 in a spot representing that counter. For example,
+            // a button that hits 0,2,3,4 ends up with 1 0 1 1 1. That is then
+            // rotated so that each vertical position in a column represents
+            // each button. Let's say the solution was 6, 4, 10, 17, 21. We'd
+            // create an augmented matrix like this:
+            //
+            //  1  ... 6
+            //  0  ... 4
+            //  1  ... 10
+            //  1  ... 17
+            //  1  ... 21
+            //
+            //  Then when we run the gaussian elimination algorithm we'll end
+            //  up answering how many times each button is pressed.
             let buttons: Vec<_> = self.buttons.iter().map(|b| {
-                let mut j: Joltage = ZEROED;
+                let mut j = vec![0; self.joltage.len()];
                 j.iter_mut().fold(b.clone(), |b, j| {
                     if b & 0x1 > 0 {
                         *j = 1;
@@ -1360,49 +1360,90 @@ mod day10 {
                 });
                 j
             }).collect();
-            // let mut pool: Vec<Vec<u32>> = Vec::new();
-            // First button press...
-            let mut states: HashSet<Joltage> = buttons.iter().map(|b| b.clone()).collect();
-            for i in 1.. {
-                println!("hi");
-                if states.contains(&self.joltage) {
-                    println!("yay");
-                    return i;
-                }
-                /*if i % 100 == 0 {
-                    println!("{states:?}");
-                }*/
-                // Brute force just like above.
-                // println!("{states:?}");
-                let progress: Vec<_> = states.drain().collect();
-                for p in progress.into_iter() {
-                    for b in buttons.iter() {
-                        // let mut state = pool.pop().or_else(|| Some(Vec::new())).unwrap();
-                        // Increment the state after cloning it
-                        let mut next = p.clone();
-                        next.iter_mut().zip(b.iter()).for_each(|(n, b)| *n += b);
-                        if !next.iter().zip(self.joltage.iter()).any(|(s, j)| s > j) {
-                            states.insert(next);
-                        }
-                        /*state.extend(p.iter());
-                        apply_joltage(*b, state.iter_mut());
-                        // If after applytng the joltage any counter is too
-                        // high, this path isn't going to work. Similarly, if
-                        // this one is already in the hashset, drop it back
-                        // into the pool.
-                        if state.iter().zip(self.joltage.iter()).any(|(s, j)| s > j) ||
-                            states.contains(&state) {
-                            state.clear();
-                            pool.push(state);
-                        } else {
-                            states.insert(state);
-                        }*/
+
+            // Create our matrix. The first index is rows. The second is the
+            // columns.
+            let mut matrix: Vec<Vec<f64>> = vec![Vec::new(); self.joltage.len()];
+            for b in buttons {
+                matrix.iter_mut().enumerate()
+                    .for_each(|(i, entry)| {
+                        entry.push(b[i].into());
+                    });
+            }
+            // Pad out the array to the correct length
+            for row in matrix.iter_mut() {
+                row.resize(self.joltage.len(), 0f64);
+            }
+            // Slap the joltage on the end there
+            matrix.iter_mut().enumerate()
+                .for_each(|(i, entry)| {
+                    entry.push(self.joltage[i].into());
+                });
+            println!("start");
+            for r in matrix.iter() {
+                println!("{r:?}");
+            }
+
+            // First reduce to triangular form by iterating the columns and
+            // then scaling and subtracting the column'th row from the rows
+            // below to put the matrix in row-echelon form. The lower-left
+            // corner is now zeros with a diagonal line down the middle.
+            for col_idx in 0..self.joltage.len() {
+                for row_idx in (col_idx + 1)..self.joltage.len() {
+                    let [source, dest] = matrix.get_disjoint_mut([col_idx, row_idx]).unwrap();
+                    if dest[col_idx] == 0f64 {
+                        continue;
                     }
-                    /*p.clear();
-                    pool.push(p);*/
+                    // Create a scalar so that when we subtract source from
+                    // dest, dest will become 0 in col_idx.
+                    let scalar = -dest[col_idx] / source[col_idx];
+                    dest.iter_mut().enumerate().for_each(|(i, d)| {
+                        *d += scalar * source[i];
+                    });
                 }
             }
-            unreachable!()
+            println!("row echelon");
+            for r in matrix.iter() {
+                println!("{r:?}");
+            }
+
+            // Continue reducing to reduced row-echelon form by now performing
+            // the same operation, but instead subtracting the column'th row
+            // from the row above.
+            for col_idx in 1..self.joltage.len() {
+                for row_idx in 0..col_idx {
+                    let [source, dest] = matrix.get_disjoint_mut([col_idx, row_idx]).unwrap();
+                    if dest[col_idx] == 0f64 {
+                        continue;
+                    }
+                    let scalar = -dest[col_idx] / source[col_idx];
+                    dest.iter_mut().enumerate().for_each(|(i, d)| {
+                        *d += scalar * source[i];
+                    });
+                }
+            }
+            // Finally, scale each row so that its leading number is 1.0 (unless it's zero)
+            for row_idx in 0..self.joltage.len() {
+                let row = &mut matrix[row_idx];
+                let scalar = row[row_idx];
+                if scalar == 0f64 {
+                    continue
+                }
+                row.iter_mut().for_each(|d| {
+                    *d /= scalar;
+                });
+            }
+            println!("reduced row echelon");
+            for r in matrix.iter() {
+                println!("{r:?}");
+            }
+
+            // Sum up the final column values to get the joltage sequence length
+            let len = matrix.iter().fold(0, |sum, row| {
+                sum + (*row.last().unwrap() as usize)
+            });
+            println!("len: {len}");
+            len
         }
     }
 
