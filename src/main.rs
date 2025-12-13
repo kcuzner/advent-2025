@@ -1389,6 +1389,17 @@ mod day10 {
             // below to put the matrix in row-echelon form. The lower-left
             // corner is now zeros with a diagonal line down the middle.
             for col_idx in 0..self.joltage.len() {
+                if matrix[col_idx][col_idx] == 0f64 {
+                    // The leading value isn't 0.  We need to swap this row.
+                    // Look below this row for one.
+                    for other_idx in (col_idx + 1)..self.joltage.len() {
+                        if matrix[other_idx][col_idx] != 0f64 {
+                            let [old, new] = matrix.get_disjoint_mut([col_idx, other_idx]).unwrap();
+                            old.swap_with_slice(new);
+                            break;
+                        }
+                    }
+                }
                 for row_idx in (col_idx + 1)..self.joltage.len() {
                     let [source, dest] = matrix.get_disjoint_mut([col_idx, row_idx]).unwrap();
                     if dest[col_idx] == 0f64 {
@@ -1411,12 +1422,17 @@ mod day10 {
             // the same operation, but instead subtracting the column'th row
             // from the row above.
             for col_idx in 1..self.joltage.len() {
+                if matrix[col_idx][col_idx] == 0f64 {
+                    continue
+                }
                 for row_idx in 0..col_idx {
                     let [source, dest] = matrix.get_disjoint_mut([col_idx, row_idx]).unwrap();
                     if dest[col_idx] == 0f64 {
                         continue;
                     }
                     let scalar = -dest[col_idx] / source[col_idx];
+                    println!("{dest:?} {source:?} => {scalar}");
+                    assert!(!scalar.is_nan());
                     dest.iter_mut().enumerate().for_each(|(i, d)| {
                         *d += scalar * source[i];
                     });
