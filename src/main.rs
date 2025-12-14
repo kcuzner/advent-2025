@@ -1498,28 +1498,10 @@ mod day10 {
 }
 
 mod day11 {
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
 
-    // Starting from source, walks all paths to dest
-    fn count_paths(source: &str, dest: &str, nodes: &HashMap<&str, Vec<&str>>) -> usize {
-        if source == dest {
-            return 1; // A path was found
-        }
-        nodes
-            .get(source)
-            .and_then(|children| {
-                Some(
-                    children
-                        .iter()
-                        .fold(0, |count, child| count + count_paths(child, dest, nodes)),
-                )
-            })
-            .or_else(|| Some(0))
-            .unwrap()
-    }
-
-    pub fn run1(input: &str) {
-        let nodes: HashMap<&str, Vec<&str>> = input
+    fn build_nodes(input: &str) -> HashMap<&str, Vec<&str>> {
+        input
             .trim()
             .split("\n")
             .map(|line| {
@@ -1529,8 +1511,93 @@ mod day11 {
                 let conns: Vec<&str> = conn_str.split_whitespace().collect();
                 (name, conns)
             })
-            .collect();
-        let paths = count_paths("you", "out", &nodes);
+            .collect()
+    }
+
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    struct CountParams<'a> {
+        prereqs: BTreeSet<&'a str>,
+        source: &'a str,
+    }
+    impl<'a> CountParams<'a> {
+        fn new(source: &'a str) -> Self {
+            Self {
+                prereqs: BTreeSet::new(),
+                source,
+            }
+        }
+
+        fn with_prereqs<T>(mut self, prereqs: T) -> Self
+        where
+            T: IntoIterator<Item = &'a str>,
+        {
+            self.prereqs = prereqs.into_iter().collect();
+            self
+        }
+    }
+
+    struct PathCounter<'a, 'b> {
+        dest: &'a str,
+        nodes: &'b HashMap<&'a str, Vec<&'a str>>,
+        counts_by_node: HashMap<CountParams<'a>, usize>,
+    }
+
+    impl<'a, 'b> PathCounter<'a, 'b> {
+        fn new(dest: &'a str, nodes: &'b HashMap<&'a str, Vec<&'a str>>) -> Self {
+            Self {
+                dest,
+                nodes,
+                counts_by_node: HashMap::new(),
+            }
+        }
+
+        // Counts all paths to the destination given some params
+        fn count_paths(&mut self, params: CountParams<'a>) -> usize {
+            // The cache is necessary, without it this takes FOREVER because of
+            // the sheer number of paths. If this were reusable, the first
+            // invocation would clear the count by node cache.
+            match self.counts_by_node.get(&params) {
+                Some(count) => {
+                    return *count;
+                }
+                _ => (),
+            }
+            let count = if params.source == self.dest {
+                match params.prereqs.len() {
+                    0 => 1,
+                    _ => 0,
+                }
+            } else {
+                let mut params = params.clone();
+                params.prereqs.remove(params.source);
+                self.nodes
+                    .get(params.source)
+                    .and_then(|children| {
+                        Some(children.iter().fold(0, |count, child| {
+                            let mut params = params.clone();
+                            params.source = child;
+                            count + self.count_paths(params)
+                        }))
+                    })
+                    .or_else(|| Some(0))
+                    .unwrap()
+            };
+            self.counts_by_node.insert(params, count);
+            count
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let nodes = build_nodes(input);
+        let mut counter = PathCounter::new("out", &nodes);
+        let paths = counter.count_paths(CountParams::new("you"));
+        println!("Paths: {paths}");
+    }
+
+    pub fn run2(input: &str) {
+        let nodes = build_nodes(input);
+        let mut counter = PathCounter::new("out", &nodes);
+        let paths = counter.count_paths(CountParams::new("svr").with_prereqs(["dac", "fft"]));
         println!("Paths: {paths}");
     }
 }
@@ -1558,6 +1625,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "10.1" => day10::run1,
     "10.2" => day10::run2,
     "11.1" => day11::run1,
+    "11.2" => day11::run2,
 };
 
 fn main() {
