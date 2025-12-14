@@ -1350,35 +1350,37 @@ mod day10 {
             //
             //  Then when we run the gaussian elimination algorithm we'll end
             //  up answering how many times each button is pressed.
-            let buttons: Vec<_> = self.buttons.iter().map(|b| {
-                let mut j = vec![0; self.joltage.len()];
-                j.iter_mut().fold(b.clone(), |b, j| {
-                    if b & 0x1 > 0 {
-                        *j = 1;
-                    }
-                    b >> 1
-                });
-                j
-            }).collect();
+            let buttons: Vec<_> = self
+                .buttons
+                .iter()
+                .map(|b| {
+                    let mut j = vec![0; self.joltage.len()];
+                    j.iter_mut().fold(b.clone(), |b, j| {
+                        if b & 0x1 > 0 {
+                            *j = 1;
+                        }
+                        b >> 1
+                    });
+                    j
+                })
+                .collect();
 
             // Create our matrix. The first index is rows. The second is the
             // columns.
             let mut matrix: Vec<Vec<f64>> = vec![Vec::new(); self.joltage.len()];
             for b in buttons {
-                matrix.iter_mut().enumerate()
-                    .for_each(|(i, entry)| {
-                        entry.push(b[i].into());
-                    });
+                matrix.iter_mut().enumerate().for_each(|(i, entry)| {
+                    entry.push(b[i].into());
+                });
             }
             // Pad out the array to the correct length
             for row in matrix.iter_mut() {
                 row.resize(self.joltage.len(), 0f64);
             }
             // Slap the joltage on the end there
-            matrix.iter_mut().enumerate()
-                .for_each(|(i, entry)| {
-                    entry.push(self.joltage[i].into());
-                });
+            matrix.iter_mut().enumerate().for_each(|(i, entry)| {
+                entry.push(self.joltage[i].into());
+            });
             println!("start");
             for r in matrix.iter() {
                 println!("{r:?}");
@@ -1423,7 +1425,7 @@ mod day10 {
             // from the row above.
             for col_idx in 1..self.joltage.len() {
                 if matrix[col_idx][col_idx] == 0f64 {
-                    continue
+                    continue;
                 }
                 for row_idx in 0..col_idx {
                     let [source, dest] = matrix.get_disjoint_mut([col_idx, row_idx]).unwrap();
@@ -1443,7 +1445,7 @@ mod day10 {
                 let row = &mut matrix[row_idx];
                 let scalar = row[row_idx];
                 if scalar == 0f64 {
-                    continue
+                    continue;
                 }
                 row.iter_mut().for_each(|d| {
                     *d /= scalar;
@@ -1455,9 +1457,9 @@ mod day10 {
             }
 
             // Sum up the final column values to get the joltage sequence length
-            let len = matrix.iter().fold(0, |sum, row| {
-                sum + (*row.last().unwrap() as usize)
-            });
+            let len = matrix
+                .iter()
+                .fold(0, |sum, row| sum + (*row.last().unwrap() as usize));
             println!("len: {len}");
             len
         }
@@ -1494,6 +1496,44 @@ mod day10 {
     }
 }
 
+mod day11 {
+    use std::collections::HashMap;
+
+    // Starting from source, walks all paths to dest
+    fn count_paths(source: &str, dest: &str, nodes: &HashMap<&str, Vec<&str>>) -> usize {
+        if source == dest {
+            return 1; // A path was found
+        }
+        nodes
+            .get(source)
+            .and_then(|children| {
+                Some(
+                    children
+                        .iter()
+                        .fold(0, |count, child| count + count_paths(child, dest, nodes)),
+                )
+            })
+            .or_else(|| Some(0))
+            .unwrap()
+    }
+
+    pub fn run1(input: &str) {
+        let nodes: HashMap<&str, Vec<&str>> = input
+            .trim()
+            .split("\n")
+            .map(|line| {
+                let mut iter = line.split(":");
+                let name = iter.next().expect("No node name").trim();
+                let conn_str = iter.next().expect("No values").trim();
+                let conns: Vec<&str> = conn_str.split_whitespace().collect();
+                (name, conns)
+            })
+            .collect();
+        let paths = count_paths("you", "out", &nodes);
+        println!("Paths: {paths}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -1516,6 +1556,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "9.2" => day9::run2,
     "10.1" => day10::run1,
     "10.2" => day10::run2,
+    "11.1" => day11::run1,
 };
 
 fn main() {
