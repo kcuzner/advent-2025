@@ -1285,7 +1285,7 @@ mod day10 {
                         sum
                     });
             let mut iter = iter.rev();
-            let mut joltage: Vec<u32> = iter
+            let joltage: Vec<u32> = iter
                 .next()
                 .and_then(|s| Some(s[1..s.len() - 1].to_string()))
                 .expect("No joltage")
@@ -1487,6 +1487,7 @@ mod day10 {
     }
 
     pub fn run2(input: &str) {
+        println!("WORK IN PROGRESS! This one is hard");
         let machines: Vec<_> = input.trim().split("\n").map(|l| Machine::new(l)).collect();
         let presses = machines
             .iter()
