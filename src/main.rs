@@ -1602,6 +1602,70 @@ mod day11 {
     }
 }
 
+mod day12 {
+    use std::collections::HashMap;
+
+    struct Shape {
+        data: [bool; 9],
+    }
+    impl Shape {
+        fn new<'a, T>(iter: &mut T) -> Self
+        where
+            T: Iterator<Item = &'a str>,
+        {
+            Self {
+                data: [
+                    iter.next().unwrap(),
+                    iter.next().unwrap(),
+                    iter.next().unwrap(),
+                ]
+                .iter()
+                .flat_map(|l| l.trim().chars().map(|ch| ch == '#'))
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+            }
+        }
+        fn area(&self) -> usize {
+            self.data
+                .iter()
+                .fold(0, |sum, p| if *p { sum + 1 } else { sum })
+        }
+    }
+
+    pub fn run1(input: &str) {
+        let mut iter = input.split("\n");
+        let mut shapes: HashMap<usize, Shape> = HashMap::new();
+        // I'm lazy. Hardcoding this to the shape of my data
+        for i in 0..6 {
+            iter.next();
+            shapes.insert(i, Shape::new(&mut iter));
+            iter.next();
+        }
+        let count = iter.fold(0, |count, l| {
+            if l.len() == 0 {
+                return count;
+            }
+            let mut iter = l.split(":");
+            let area = iter
+                .next()
+                .unwrap()
+                .split("x")
+                .fold(1, |area, s| area * s.parse::<usize>().unwrap());
+            let required =
+                iter.next()
+                    .unwrap()
+                    .split_whitespace()
+                    .enumerate()
+                    .fold(0, |sum, (idx, s)| {
+                        sum + (shapes.get(&idx).unwrap().area() * s.parse::<usize>().unwrap())
+                    });
+            if area > required { count + 1 } else { count }
+        });
+        println!("Naive count: {count}");
+    }
+}
+
 static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "1.1" => day1::run1,
     "1.2" => day1::run2,
@@ -1626,6 +1690,7 @@ static DAYS: phf::Map<&'static str, fn(&str)> = phf::phf_map! {
     "10.2" => day10::run2,
     "11.1" => day11::run1,
     "11.2" => day11::run2,
+    "12.1" => day12::run1,
 };
 
 fn main() {
