@@ -1261,7 +1261,49 @@ mod day9 {
 }
 
 mod day10 {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
+
+    struct IndicatorSolver {
+        buttons: Vec<u32>,
+        cache: HashMap<u32, usize>,
+    }
+    impl IndicatorSolver {
+        fn new(buttons: &Vec<u32>) -> Self {
+            Self {
+                buttons: buttons.clone(),
+                cache: HashMap::new(),
+            }
+        }
+        fn get_sequence_len(&mut self, state: u32) -> usize {
+            if let Some(len) = self.cache.get(&state) {
+                return *len;
+            }
+            if state == 0 {
+                return 0;
+            }
+            // First button press...
+            let mut states: HashSet<u32> = self.buttons.iter().map(|i| *i).collect();
+            for i in 1.. {
+                if states.contains(&state) {
+                    self.cache.insert(state, i);
+                    return i;
+                }
+                // This is a brute force algorithm, but none of the machines
+                // have a particularly large control panel. This should top out
+                // at like 200-500 items for the 9-ish bits I think we actually
+                // use.
+                let progress: Vec<_> = states.drain().collect();
+                // For each in-progress sequence, press each button once and
+                // add the result into the set
+                for p in progress.into_iter() {
+                    for b in self.buttons.iter() {
+                        states.insert(p ^ b);
+                    }
+                }
+            }
+            unreachable!()
+        }
+    }
 
     struct Machine {
         // Each bit is an indicator
@@ -1308,32 +1350,46 @@ mod day10 {
         }
 
         fn get_init_sequence_len(&self) -> usize {
-            if self.desired == 0 {
-                return 0;
-            }
-            // First button press...
-            let mut states: HashSet<u32> = self.buttons.iter().map(|i| *i).collect();
-            for i in 1.. {
-                if states.contains(&self.desired) {
-                    return i;
-                }
-                // This is a brute force algorithm, but none of the machines
-                // have a particularly large control panel. This should top out
-                // at like 200-500 items for the 9-ish bits I think we actually
-                // use.
-                let progress: Vec<_> = states.drain().collect();
-                // For each in-progress sequence, press each button once and
-                // add the result into the set
-                for p in progress.into_iter() {
-                    for b in self.buttons.iter() {
-                        states.insert(p ^ b);
-                    }
-                }
-            }
-            unreachable!()
+            IndicatorSolver::new(&self.buttons).get_sequence_len(self.desired)
         }
 
         fn get_joltage_sequence_len(&self) -> usize {
+            // After attempting to write my own linear solver and getting to
+            // the point of being able to get reduced row eschelon form and
+            // realizing that I'd need to perform back-substitution and then
+            // make some kind of constraint solver...... I searched around for
+            // some hints.
+            //
+            // This uses the (probably now famous) divide-and-conquer solution.
+            let mut solver = IndicatorSolver::new(&self.buttons);
+            fn solve(solver: &mut IndicatorSolver, joltage: &mut Vec<u32>) -> usize {
+                println!("{joltage:?}");
+                let (state, done) =
+                    joltage
+                        .iter_mut()
+                        .rev()
+                        .fold((0, true), |(mut state, done), joltage| {
+                            state <<= 1;
+                            if *joltage % 2 == 1 {
+                                *joltage -= 1;
+                                *joltage /= 2;
+                                (state + 1, false)
+                            } else {
+                                *joltage /= 2;
+                                (state, done && *joltage == 0)
+                            }
+                        });
+                if done {
+                    return 0;
+                }
+                let len = solver.get_sequence_len(state);
+                println!("  {len}");
+                return 2 * solve(solver, joltage) + len;
+            }
+
+            let mut joltage = self.joltage.clone();
+            return solve(&mut solver, &mut joltage);
+
             // The final joltage can be thought of as the sum of the button
             // presses. We'll create a matrix where a button press for a counter
             // places a 1 in a spot representing that counter. For example,
@@ -1373,13 +1429,25 @@ mod day10 {
                     entry.push(b[i].into());
                 });
             }
-            // Pad out the array to the correct length
+            // Ensure the matrix is large enough
+            let max = matrix.iter().fold(0, |len, row| match row.len() {
+                l if l > len => l,
+                _ => len,
+            });
+            matrix.resize(max, vec![0f64; max]);
             for row in matrix.iter_mut() {
-                row.resize(self.joltage.len(), 0f64);
+                row.resize(max, 0f64);
             }
-            // Slap the joltage on the end there
+            // Slap the joltage on the end there, padding with 0's
             matrix.iter_mut().enumerate().for_each(|(i, entry)| {
-                entry.push(self.joltage[i].into());
+                entry.push(
+                    self.joltage
+                        .get(i)
+                        .and_then(|j| Some(*j))
+                        .or_else(|| Some(0))
+                        .unwrap()
+                        .into(),
+                );
             });
             println!("start");
             for r in matrix.iter() {
@@ -1491,7 +1559,12 @@ mod day10 {
         let machines: Vec<_> = input.trim().split("\n").map(|l| Machine::new(l)).collect();
         let presses = machines
             .iter()
-            .map(|m| m.get_joltage_sequence_len())
+            .map(|m| {
+                println!("starting");
+                let l = m.get_joltage_sequence_len();
+                println!("  got {l}");
+                l
+            })
             .fold(0, |sum, l| sum + l);
         println!("Total presses: {presses}");
     }
